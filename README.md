@@ -30,7 +30,22 @@ clawpypaste sits in your menu bar and shows every grabbable block from the sessi
 
 ## Install
 
-Requires macOS 13+ and the Swift toolchain (Xcode Command Line Tools is enough: `xcode-select --install`).
+macOS 13 (Ventura) or newer.
+
+### Homebrew (recommended)
+
+```bash
+brew install --cask krisbradley/tap/clawpypaste
+open /Applications/clawpypaste.app
+```
+
+### Direct download
+
+Grab the notarized `clawpypaste.zip` from the [latest release](https://github.com/krisbradley/clawpypaste/releases/latest), unzip, drag `clawpypaste.app` into `/Applications`, double-click.
+
+### From source
+
+Requires the Swift toolchain (`xcode-select --install` is enough).
 
 ```bash
 git clone https://github.com/krisbradley/clawpypaste.git
@@ -38,15 +53,15 @@ cd clawpypaste
 make install
 ```
 
-That builds the release binary, assembles `clawpypaste.app`, drops it into `/Applications`, and launches it. Look for a black crab silhouette in your menu bar.
+### Launch at login
 
-To autostart on login:
+After installing by any of the methods above:
 
 ```bash
-make login-enable
+/Applications/clawpypaste.app/Contents/MacOS/clawpypaste --enable-login
 ```
 
-Or right-click the menu bar icon → **Launch at login**.
+Or right-click the menu bar 🦀 → **Launch at login**.
 
 ## Usage
 
