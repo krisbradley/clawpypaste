@@ -97,7 +97,7 @@ struct BlockRow: View {
             Button("Copy as CSV") { onCopyAs(parsed.toCSV()) }
         }
 
-        if block.isProseLike, Humanizer.looksAIPunctuated(block.content) {
+        if block.isProseLike, Humanizer.looksAIGenerated(block.content) {
             Divider()
             Button("Copy humanized") { onCopyAs(Humanizer.humanize(block.content)) }
         }
