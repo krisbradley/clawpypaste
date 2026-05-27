@@ -4,6 +4,10 @@ A macOS menu bar app that surfaces grabbable blocks from your active **Claude Co
 
 Reads the session JSONL Claude Code already writes to disk. No accessibility prompts, no terminal scraping, no plugins.
 
+<p align="center">
+  <img src="docs/screenshot.png" alt="clawpypaste popover" width="495">
+</p>
+
 ## Why
 
 Copy-pasting code out of a Claude Code conversation in the terminal is fiddly: wrapping breaks selection, the clipboard only holds one thing, and you usually want a specific code fence — not the prose around it.
