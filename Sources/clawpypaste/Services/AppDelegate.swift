@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Carbon.HIToolbox
+import ApplicationServices
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -15,8 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupStatusItem()
         setupPopover()
         wireAutoDismiss()
+        wireInject()
         wireGlobalHotKey()
     }
+
+    // The app that was frontmost just before our popover stole focus. The
+    // "Inject into Claude prompt" action activates this app and pastes there.
+    private var previousFrontmostApp: NSRunningApplication?
 
     // MARK: - Status item
 
@@ -85,6 +91,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // Remember what was frontmost so we can paste back into it.
+            let frontmost = NSWorkspace.shared.frontmostApplication
+            if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
+                previousFrontmostApp = frontmost
+            }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
             NSApp.activate(ignoringOtherApps: true)
@@ -99,6 +110,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.popover.performClose(nil)
             }
         }
+    }
+
+    // MARK: - Inject into previously focused app
+
+    private func wireInject() {
+        store.onInject = { [weak self] text in
+            self?.injectIntoPreviousApp(text)
+        }
+    }
+
+    private func injectIntoPreviousApp(_ text: String) {
+        // Accessibility / Input Monitoring permission is required to post
+        // synthetic key events. The first call prompts the user.
+        let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(opts) else {
+            NSLog("inject: accessibility not granted, skipping")
+            // Still close the popover so the user isn't left dangling.
+            popover.performClose(nil)
+            return
+        }
+
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+
+        popover.performClose(nil)
+
+        let target = previousFrontmostApp
+        if let target = target, target.bundleIdentifier != Bundle.main.bundleIdentifier {
+            target.activate(options: [])
+        }
+
+        // Give the focus change a tick to land, then post Cmd+V.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            Self.postCommandV()
+        }
+    }
+
+    private static func postCommandV() {
+        let src = CGEventSource(stateID: .hidSystemState)
+        guard
+            let vDown = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
+            let vUp   = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
+        else { return }
+        vDown.flags = .maskCommand
+        vUp.flags = .maskCommand
+        vDown.post(tap: .cghidEventTap)
+        vUp.post(tap: .cghidEventTap)
     }
 
     // MARK: - Global hotkey

@@ -4,9 +4,14 @@ struct BlockRow: View {
     let block: Block
     let isRecentlyCopied: Bool
     let isPinned: Bool
+    let isSelected: Bool
     let onCopy: () -> Void
     let onCopyAs: (String) -> Void
     let onTogglePin: () -> Void
+    let onInject: () -> Void
+
+    @State private var showingEditSheet = false
+    @State private var showingSnippetSheet = false
 
     private var maxPreviewLines: Int {
         switch block.kind {
@@ -19,7 +24,6 @@ struct BlockRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            // Star toggles pin without triggering the row's copy action.
             Button(action: onTogglePin) {
                 Image(systemName: isPinned ? "star.fill" : "star")
                     .font(.system(size: 11))
@@ -53,6 +57,11 @@ struct BlockRow: View {
                                     .font(.system(size: 10))
                                     .foregroundStyle(.tertiary)
                             }
+                            if SnippetEngine.hasPlaceholders(block.content) {
+                                Text("• has {{vars}}")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.indigo)
+                            }
                             Spacer()
                             if isRecentlyCopied {
                                 Text("copied")
@@ -68,8 +77,6 @@ struct BlockRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            // Drag the content out to other apps (editor, Slack, etc).
-            // SwiftUI handles tap-vs-drag disambiguation automatically.
             .draggable(block.content) {
                 Text(block.preview)
                     .font(.system(size: 11, design: block.isCodeLike ? .monospaced : .default))
@@ -81,36 +88,75 @@ struct BlockRow: View {
         }
         .padding(.leading, 4)
         .background(rowBackground)
+        .sheet(isPresented: $showingEditSheet) {
+            EditCopySheet(
+                initial: block.content,
+                isCodeLike: block.isCodeLike,
+                onCopy: { text in onCopyAs(text) }
+            )
+        }
+        .sheet(isPresented: $showingSnippetSheet) {
+            SnippetFillSheet(
+                template: block.content,
+                placeholders: SnippetEngine.placeholders(in: block.content),
+                isCodeLike: block.isCodeLike,
+                onCopy: { text in onCopyAs(text) }
+            )
+        }
     }
 
-    // Right-click menu offers format-aware copy variants:
-    //   - Tables: Markdown / TSV (Slack) / CSV
-    //   - Text-like prose: plain / humanized (when AI punctuation is present)
+    // MARK: - Right-click menu
+
     @ViewBuilder
     private var contextMenu: some View {
         Button("Copy") { onCopy() }
 
+        if SnippetEngine.hasPlaceholders(block.content) {
+            Button("Fill in values…") { showingSnippetSheet = true }
+        }
+
+        Button("Edit and copy…") { showingEditSheet = true }
+
+        Divider()
+
         if block.kind == .table, let parsed = TableParser.parse(block.content) {
-            Divider()
             Button("Copy as Markdown") { onCopyAs(parsed.toMarkdown()) }
             Button("Copy as TSV (Slack)") { onCopyAs(parsed.toTSV()) }
             Button("Copy as CSV") { onCopyAs(parsed.toCSV()) }
+            Divider()
         }
 
         if block.isProseLike, Humanizer.looksAIGenerated(block.content) {
-            Divider()
             Button("Copy humanized") { onCopyAs(Humanizer.humanize(block.content)) }
         }
 
+        // Generic transforms — gated by applicability.
+        if mayBenefitFromStripMarkdown {
+            Button("Copy without markdown") { onCopyAs(Transformer.stripMarkdown(block.content)) }
+        }
+        if Transformer.looksLikeJSON(block.content) {
+            Button("Copy as pretty JSON") { onCopyAs(Transformer.prettyJSON(block.content)) }
+        }
+        if block.kind != .code && block.kind != .markdown {
+            Button("Wrap as code fence") {
+                onCopyAs(Transformer.wrapInFence(block.content, language: block.language))
+            }
+        }
+
         Divider()
+
+        Button("Inject into Claude prompt") { onInject() }
         Button(isPinned ? "Unpin" : "Pin") { onTogglePin() }
     }
 
-    private var rowBackground: Color {
-        if isRecentlyCopied { return Color.green.opacity(0.12) }
-        if isPinned        { return Color.yellow.opacity(0.06) }
-        return Color.clear
+    private var mayBenefitFromStripMarkdown: Bool {
+        guard block.isProseLike else { return false }
+        let c = block.content
+        return c.contains("**") || c.contains("__") || c.contains("`") || c.contains("[")
+            || c.range(of: "^#{1,6} ", options: [.regularExpression, .anchored]) != nil
     }
+
+    // MARK: - Preview body
 
     @ViewBuilder
     private var previewBody: some View {
@@ -135,7 +181,6 @@ struct BlockRow: View {
                 .multilineTextAlignment(.leading)
                 .foregroundStyle(.primary)
         } else {
-            // path, url: plain to avoid markdown parser eating underscores etc.
             Text(block.previewLines(maxPreviewLines))
                 .font(.system(size: 12))
                 .lineLimit(maxPreviewLines)
@@ -146,6 +191,15 @@ struct BlockRow: View {
 
     private var markdownPreview: AttributedString {
         MarkdownRenderer.render(block.previewLines(maxPreviewLines))
+    }
+
+    // MARK: - Visual
+
+    private var rowBackground: Color {
+        if isSelected      { return Color.accentColor.opacity(0.18) }
+        if isRecentlyCopied { return Color.green.opacity(0.12) }
+        if isPinned        { return Color.yellow.opacity(0.06) }
+        return Color.clear
     }
 
     private var kindBadge: some View {

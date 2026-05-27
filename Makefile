@@ -13,11 +13,17 @@ install: build
 		rm -rf "$(INSTALL_PATH)"; \
 	fi
 	mv "$(APP)" "$(INSTALL_PATH)"
+	@# Symlink the binary so `clawpypaste` is on PATH for the CLI surface.
+	@if [ -w "/usr/local/bin" ] || [ -d "/usr/local/bin" -a -w "/usr/local/bin" ]; then \
+		ln -sf "$(INSTALL_PATH)/Contents/MacOS/clawpypaste" /usr/local/bin/clawpypaste 2>/dev/null \
+			&& echo "✓ symlinked CLI at /usr/local/bin/clawpypaste" \
+			|| echo "  (couldn't symlink — run: sudo ln -sf $(INSTALL_PATH)/Contents/MacOS/clawpypaste /usr/local/bin/clawpypaste)"; \
+	fi
 	open "$(INSTALL_PATH)"
 	@echo ""
 	@echo "✓ installed to $(INSTALL_PATH)"
 	@echo "  To autostart on login:  make login-enable"
-	@echo "  Or right-click the menu bar icon → 'Launch at login'"
+	@echo "  CLI usage:              clawpypaste --help"
 
 run:
 	swift run
@@ -29,6 +35,7 @@ uninstall:
 	-"$(INSTALL_PATH)/Contents/MacOS/clawpypaste" --disable-login 2>/dev/null || true
 	-pkill -f clawpypaste 2>/dev/null || true
 	rm -rf "$(INSTALL_PATH)"
+	-rm -f /usr/local/bin/clawpypaste
 	@echo "✓ uninstalled"
 
 login-enable:

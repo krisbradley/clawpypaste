@@ -14,10 +14,44 @@ final class SessionStore: ObservableObject {
     @Published var searchText: String = ""
     @Published var kindFilter: BlockKind? = nil
     @Published var recentlyCopiedId: String? = nil
+    @Published var selectedBlockId: String? = nil
+    @Published var scope: Scope = .active
     @Published private(set) var pinned: [PinnedBlock] = []
 
-    // Set by AppDelegate to auto-dismiss the popover after a copy.
+    enum Scope: Equatable {
+        case active
+        case history
+    }
+
+    // Set by AppDelegate to auto-dismiss the popover after a copy / to send
+    // text into the previously-focused app.
     var onCopy: (() -> Void)?
+    var onInject: ((String) -> Void)?
+
+    func inject(_ block: Block) {
+        onInject?(block.content)
+    }
+
+    func selectFirstIfNeeded() {
+        if selectedBlockId == nil, let first = filteredBlocks.first {
+            selectedBlockId = first.id
+        }
+    }
+
+    func moveSelection(by offset: Int) {
+        let blocks = filteredBlocks
+        guard !blocks.isEmpty else { return }
+        let currentIndex = blocks.firstIndex(where: { $0.id == selectedBlockId }) ?? -1
+        let newIndex = max(0, min(blocks.count - 1, currentIndex + offset))
+        selectedBlockId = blocks[newIndex].id
+    }
+
+    func copySelected() {
+        guard let id = selectedBlockId,
+              let block = filteredBlocks.first(where: { $0.id == id })
+        else { return }
+        copy(block)
+    }
 
     private let extractor = BlockExtractor()
     private var watcher: FileWatcher?
@@ -51,13 +85,14 @@ final class SessionStore: ObservableObject {
         rescanTimer?.invalidate()
     }
 
-    // Union of pinned + session blocks, with pinned at the top.
+    // Union of pinned + scoped blocks, with pinned at the top.
     // Filters and search apply to both. Dedupe by id so the same content
-    // doesn't show twice when a pinned block is also present in the session.
+    // doesn't show twice when a pinned block is also present.
     var filteredBlocks: [Block] {
+        let sourceBlocks = (scope == .history) ? HistoryStore.shared.blocks : blocks
         let pinnedBlocks = pinned.map { $0.asBlock() }
         let pinnedIds = Set(pinnedBlocks.map(\.id))
-        let unpinned = blocks.filter { !pinnedIds.contains($0.id) }
+        let unpinned = sourceBlocks.filter { !pinnedIds.contains($0.id) }
         var result = pinnedBlocks + unpinned
         if let k = kindFilter {
             result = result.filter { $0.kind == k }
@@ -67,6 +102,15 @@ final class SessionStore: ObservableObject {
             result = result.filter { $0.content.lowercased().contains(q) }
         }
         return result
+    }
+
+    func enterHistoryScope() {
+        scope = .history
+        HistoryStore.shared.ensureBuilt()
+    }
+
+    func exitHistoryScope() {
+        scope = .active
     }
 
     func copy(_ block: Block) {

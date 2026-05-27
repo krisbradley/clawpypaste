@@ -24,6 +24,12 @@ struct ClawpypasteApp: App {
             print("launch-at-login: \(LoginItem.isEnabled ? "STILL enabled" : "disabled")")
             exit(0)
         }
+        // CLI subcommands (clawpypaste last / search / paste / list / etc.).
+        // Returns true if a subcommand was handled — we exit instead of
+        // booting the SwiftUI runtime.
+        if CLI.runIfPresent() {
+            exit(0)
+        }
     }
 
     var body: some Scene {
