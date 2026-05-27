@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Bundles the Swift Package binary into a proper macOS .app so you can drop
-# it in /Applications and register it as a Login Item.
+# Bundles the Swift Package binary into a macOS .app and codesigns it.
+#
+# Without CLAWPYPASTE_SIGN_IDENTITY set, defaults to the Developer ID
+# Application identity for this project; override to skip or change.
+# Pass --adhoc to do an ad-hoc local-only signature (no notarization possible).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -8,6 +11,12 @@ APP_NAME="clawpypaste"
 APP_BUNDLE="${APP_NAME}.app"
 BUNDLE_ID="com.kristopherbradley.${APP_NAME}"
 VERSION="0.1.0"
+SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
+
+MODE="developer-id"
+if [ "${1:-}" = "--adhoc" ]; then
+    MODE="adhoc"
+fi
 
 echo "Building release binary..."
 swift build -c release
@@ -52,14 +61,36 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-# Ad-hoc sign so macOS doesn't quarantine-block it.
-codesign --force --deep --sign - "${APP_BUNDLE}" >/dev/null 2>&1 || true
+# Empty entitlements file is fine — non-sandboxed app with no special needs.
+ENTITLEMENTS="$(mktemp -t clawpypaste-entitlements).plist"
+cat > "${ENTITLEMENTS}" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+</dict>
+</plist>
+EOF
+
+if [ "${MODE}" = "adhoc" ]; then
+    echo "Signing ad-hoc (no notarization possible)..."
+    codesign --force --deep --sign - "${APP_BUNDLE}"
+else
+    echo "Signing with: ${SIGN_IDENTITY}"
+    codesign --force --options runtime --timestamp \
+        --entitlements "${ENTITLEMENTS}" \
+        --sign "${SIGN_IDENTITY}" \
+        "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
+    codesign --force --options runtime --timestamp \
+        --entitlements "${ENTITLEMENTS}" \
+        --sign "${SIGN_IDENTITY}" \
+        "${APP_BUNDLE}"
+fi
+rm -f "${ENTITLEMENTS}"
 
 echo ""
-echo "Built ${APP_BUNDLE}"
+echo "✓ Built ${APP_BUNDLE} (${MODE})"
+codesign -dv --verbose=2 "${APP_BUNDLE}" 2>&1 | grep -E 'Identifier|Authority|TeamIdentifier|Sealed' | sed 's/^/   /'
 echo ""
-echo "Install:"
-echo "  mv ${APP_BUNDLE} /Applications/"
-echo "  open /Applications/${APP_BUNDLE}"
-echo ""
-echo "After launch, right-click the menu bar icon and toggle 'Launch at login'."
+echo "  Install locally:  make install"
+echo "  Notarize + ship:  ./release.sh"
