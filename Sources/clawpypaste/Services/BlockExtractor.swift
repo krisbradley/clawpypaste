@@ -33,13 +33,14 @@ struct BlockExtractor {
     private func kindRank(_ k: BlockKind) -> Int {
         switch k {
         case .code: return 0
-        case .toolResult: return 1
-        case .toolInput: return 2
-        case .markdown: return 3
-        case .section: return 4
-        case .message: return 5
-        case .path: return 6
-        case .url: return 7
+        case .table: return 1
+        case .toolResult: return 2
+        case .toolInput: return 3
+        case .markdown: return 4
+        case .section: return 5
+        case .message: return 6
+        case .path: return 7
+        case .url: return 8
         }
     }
 
@@ -145,6 +146,23 @@ struct BlockExtractor {
                 ),
                 into: &byId
             )
+            // Markdown content written to disk may contain tables — surface
+            // each one as its own .table block so the user can copy it as
+            // CSV / TSV without scrolling the whole file.
+            if field.kind == .markdown {
+                for table in TableParser.extractTables(from: value) {
+                    insert(
+                        .make(
+                            kind: .table,
+                            content: table.raw,
+                            title: "\(toolName).\(field.key)",
+                            turnIndex: turnIndex,
+                            timestamp: timestamp
+                        ),
+                        into: &byId
+                    )
+                }
+            }
         }
     }
 
@@ -181,6 +199,20 @@ struct BlockExtractor {
 
         // Strip code fences before scanning prose so we don't grab paths/URLs from code.
         let prose = stripFences(from: text)
+
+        // Markdown tables: emit the raw markdown form as a .table block. The
+        // re-parse for CSV/TSV happens lazily at copy time via TableParser.parse.
+        for table in TableParser.extractTables(from: prose) {
+            insert(
+                .make(
+                    kind: .table,
+                    content: table.raw,
+                    turnIndex: turnIndex,
+                    timestamp: timestamp
+                ),
+                into: &byId
+            )
+        }
 
         for section in extractSections(from: prose) {
             insert(

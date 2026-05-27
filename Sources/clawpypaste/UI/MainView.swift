@@ -22,6 +22,7 @@ struct MainView: View {
                                 isRecentlyCopied: store.recentlyCopiedId == block.id,
                                 isPinned: store.isPinned(block),
                                 onCopy: { store.copy(block) },
+                                onCopyAs: { text in store.copy(block, asText: text) },
                                 onTogglePin: { store.togglePin(block) }
                             )
                             Divider()

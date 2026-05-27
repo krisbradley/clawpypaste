@@ -3,6 +3,7 @@ import Foundation
 enum BlockKind: String, CaseIterable, Codable {
     case code         // fenced code from assistant text, or content written to a code file
     case markdown     // prose content: ```md fences, *.md/*.txt files written by tools
+    case table        // markdown table; can be re-rendered as TSV / CSV / md on copy
     case toolResult   // output of a tool call
     case toolInput    // input to a tool call (e.g. Bash command)
     case path         // file path mentioned in text
@@ -14,6 +15,7 @@ enum BlockKind: String, CaseIterable, Codable {
         switch self {
         case .code:       return "Code"
         case .markdown:   return "Markdown"
+        case .table:      return "Table"
         case .toolResult: return "Tool output"
         case .toolInput:  return "Tool input"
         case .path:       return "Path"

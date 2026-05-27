@@ -70,7 +70,11 @@ final class SessionStore: ObservableObject {
     }
 
     func copy(_ block: Block) {
-        Clipboard.copy(block.content)
+        copy(block, asText: block.content)
+    }
+
+    func copy(_ block: Block, asText text: String) {
+        Clipboard.copy(text)
         recentlyCopiedId = block.id
         onCopy?()
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in

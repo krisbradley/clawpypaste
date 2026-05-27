@@ -5,11 +5,13 @@ struct BlockRow: View {
     let isRecentlyCopied: Bool
     let isPinned: Bool
     let onCopy: () -> Void
+    let onCopyAs: (String) -> Void
     let onTogglePin: () -> Void
 
     private var maxPreviewLines: Int {
         switch block.kind {
         case .code, .toolResult, .toolInput: return 8
+        case .table: return 8
         case .markdown, .section, .message: return 5
         case .path, .url: return 1
         }
@@ -75,9 +77,33 @@ struct BlockRow: View {
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
                     .frame(maxWidth: 300)
             }
+            .contextMenu { contextMenu }
         }
         .padding(.leading, 4)
         .background(rowBackground)
+    }
+
+    // Right-click menu offers format-aware copy variants:
+    //   - Tables: Markdown / TSV (Slack) / CSV
+    //   - Text-like prose: plain / humanized (when AI punctuation is present)
+    @ViewBuilder
+    private var contextMenu: some View {
+        Button("Copy") { onCopy() }
+
+        if block.kind == .table, let parsed = TableParser.parse(block.content) {
+            Divider()
+            Button("Copy as Markdown") { onCopyAs(parsed.toMarkdown()) }
+            Button("Copy as TSV (Slack)") { onCopyAs(parsed.toTSV()) }
+            Button("Copy as CSV") { onCopyAs(parsed.toCSV()) }
+        }
+
+        if block.isProseLike, Humanizer.looksAIPunctuated(block.content) {
+            Divider()
+            Button("Copy humanized") { onCopyAs(Humanizer.humanize(block.content)) }
+        }
+
+        Divider()
+        Button(isPinned ? "Unpin" : "Pin") { onTogglePin() }
     }
 
     private var rowBackground: Color {
@@ -137,6 +163,7 @@ struct BlockRow: View {
         switch block.kind {
         case .code:       return .blue
         case .markdown:   return .brown
+        case .table:      return .mint
         case .toolResult: return .purple
         case .toolInput:  return .indigo
         case .path:       return .orange
