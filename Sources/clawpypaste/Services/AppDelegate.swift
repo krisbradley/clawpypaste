@@ -20,9 +20,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wireGlobalHotKey()
     }
 
-    // The app that was frontmost just before our popover stole focus. The
-    // "Inject into Claude prompt" action activates this app and pastes there.
+    // The app that was frontmost just before our popover/menu stole focus.
+    // Used by the Inject action and the "Send window screenshot" action to
+    // figure out where to paste.
     private var previousFrontmostApp: NSRunningApplication?
+
+    // Coordinator for the no-Screen-Recording-permission window-shot flow.
+    private let screenshotCoordinator = WindowScreenshotCoordinator()
 
     // MARK: - Status item
 
@@ -39,14 +43,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func handleStatusItemClick(_ sender: Any?) {
         let event = NSApp.currentEvent
         if event?.type == .rightMouseUp {
+            captureFrontmostApp()
             showContextMenu()
         } else {
             togglePopover()
         }
     }
 
+    private func captureFrontmostApp() {
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        if frontmost?.bundleIdentifier != Bundle.main.bundleIdentifier {
+            previousFrontmostApp = frontmost
+        }
+    }
+
     private func showContextMenu() {
         let menu = NSMenu()
+        menu.addItem(withTitle: "Send window to Claude…", action: #selector(sendWindowToClaude), keyEquivalent: "s")
+            .target = self
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Open window", action: #selector(openDetachedWindow), keyEquivalent: "")
             .target = self
         menu.addItem(withTitle: "Rescan", action: #selector(rescan), keyEquivalent: "r")
@@ -197,6 +212,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func rescan() { store.rescan() }
     @objc private func quit() { NSApp.terminate(nil) }
+
+    @objc private func sendWindowToClaude() {
+        screenshotCoordinator.capture(target: previousFrontmostApp)
+    }
 }
 
 // When the detached window closes, drop the activation policy back so the
