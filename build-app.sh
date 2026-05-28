@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 APP_NAME="clawpypaste"
 APP_BUNDLE="${APP_NAME}.app"
 BUNDLE_ID="com.kristopherbradley.${APP_NAME}"
-VERSION="0.2.5"
+VERSION="0.2.6"
 SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
 
 MODE="developer-id"

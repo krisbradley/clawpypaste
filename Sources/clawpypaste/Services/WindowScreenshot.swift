@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import ApplicationServices
+import UserNotifications
 
 // "Send window to Claude" without needing Screen Recording permission.
 //
@@ -71,27 +72,39 @@ final class WindowScreenshotCoordinator {
     }
 
     private func pasteToTarget() {
-        // Pick the best paste target:
-        //   1. The app we captured at menu-open time (usually right — the
-        //      user's terminal with Claude). But if it was System Settings
-        //      or the Finder or clawpypaste itself, skip it.
-        //   2. Otherwise, whatever's frontmost RIGHT NOW. After the system
-        //      screenshot completes, macOS typically restores focus to where
-        //      it was before the screenshot UI engaged — usually a sane
-        //      target.
         let candidate = preferredTarget()
+        let targetName = candidate?.localizedName ?? "?"
+        NSLog("screenshot: clipboard has image, preferred target = \(targetName)")
 
-        if let app = candidate {
-            NSLog("screenshot: pasting into \(app.localizedName ?? app.bundleIdentifier ?? "?")")
-            app.activate(options: [])
-        } else {
-            NSLog("screenshot: no safe paste target — leaving image on clipboard for manual ⌘V")
+        // Always show a user notification so the user knows the image is
+        // ready on the clipboard, even if auto-paste fails for any reason
+        // (Secure Keyboard Entry in iTerm2, wrong window focused, etc.).
+        notify(target: targetName)
+
+        guard let app = candidate else {
+            NSLog("screenshot: no safe target — manual ⌘V required")
             return
         }
-        // Longer delay than Inject — the system screenshot UI sometimes
-        // takes a beat to release focus cleanly.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            Self.postCommandV()
+
+        // The screenshot capture animation takes ~0.4s before focus settles.
+        // Wait that out, then activate the target, wait again, then paste.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            let ok = app.activate(options: [.activateAllWindows])
+            NSLog("screenshot: activate(\(targetName)) returned \(ok)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                Self.postCommandV()
+                NSLog("screenshot: ⌘V posted")
+            }
+        }
+    }
+
+    private func notify(target: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Screenshot ready"
+        content.body = "Pasting into \(target). If it doesn't appear, switch to your terminal and ⌘V."
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
+            UNUserNotificationCenter.current().add(req)
         }
     }
 
