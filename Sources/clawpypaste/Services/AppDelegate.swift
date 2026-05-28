@@ -49,17 +49,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
 
         // Drop target overlay — turns the icon into a "send to Claude" sink.
-        let drop = MenuBarDropTarget(frame: button.bounds)
-        drop.autoresizingMask = [.width, .height]
+        // Constrained to fully cover the button at all times so drag events
+        // hit the overlay regardless of when the status bar lays it out.
+        let drop = MenuBarDropTarget()
         drop.onDropImage = { [weak self] img in self?.handleDroppedImage(img) }
         drop.onDropText = { [weak self] text in self?.handleDroppedText(text) }
         drop.onDropFileURL = { [weak self] url in self?.handleDroppedFileURL(url) }
         button.addSubview(drop)
+        NSLayoutConstraint.activate([
+            drop.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+            drop.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+            drop.topAnchor.constraint(equalTo: button.topAnchor),
+            drop.bottomAnchor.constraint(equalTo: button.bottomAnchor),
+        ])
     }
 
     // MARK: - Drop handlers
 
     private func handleDroppedImage(_ image: NSImage) {
+        NSLog("drop: handleDroppedImage")
+        notifyDrop(action: "Image")
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.writeObjects([image])
@@ -67,6 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleDroppedText(_ text: String) {
+        NSLog("drop: handleDroppedText (\(text.count) chars)")
+        notifyDrop(action: "Text")
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(text, forType: .string)
@@ -74,6 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleDroppedFileURL(_ url: URL) {
+        NSLog("drop: handleDroppedFileURL: \(url.path)")
+        notifyDrop(action: "File @-reference")
         let pb = NSPasteboard.general
         pb.clearContents()
         // Claude Code's TUI uses the `@path` convention to actually *read*
@@ -84,19 +97,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sendToClaudeTerminal(useControlV: false)
     }
 
+    private func notifyDrop(action: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Sending to Claude"
+        content.body = "\(action) on clipboard; pasting into your terminal."
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req) { _ in }
+    }
+
     // Find a running terminal app and route paste there. Falls back to the
     // previously-frontmost app, then to whatever's frontmost right now.
     private func sendToClaudeTerminal(useControlV: Bool) {
         let target = findTerminalApp() ?? previousFrontmostApp ?? NSWorkspace.shared.frontmostApplication
+        NSLog("drop: target = \(target?.localizedName ?? "<nil>"), useControlV = \(useControlV)")
         guard let app = target,
               app.bundleIdentifier != Bundle.main.bundleIdentifier
-        else { return }
-        app.activate(options: [.activateAllWindows])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+        else {
+            NSLog("drop: no target app available; clipboard ready for manual paste")
+            return
+        }
+        let ok = app.activate(options: [.activateAllWindows])
+        NSLog("drop: activate(\(app.localizedName ?? "?")) returned \(ok)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             if useControlV {
                 Self.postControlV()
+                NSLog("drop: ⌃V posted")
             } else {
                 Self.postCommandV()
+                NSLog("drop: ⌘V posted")
             }
         }
     }
