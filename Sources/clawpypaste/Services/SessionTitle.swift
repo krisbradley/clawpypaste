@@ -14,6 +14,7 @@ struct SessionMeta: Equatable {
     let title: String?
     let firstPrompt: String?
     let agentColor: String?
+    let cwd: String?         // working directory the session was started in
 }
 
 extension SessionMeta {
@@ -77,6 +78,7 @@ enum SessionTitle {
         let aiTitle: String?
         let agentName: String?
         let agentColor: String?
+        let cwd: String?
         let isMeta: Bool?
         let message: MessageBox?
     }
@@ -104,7 +106,7 @@ enum SessionTitle {
 
     private static func parseMeta(url: URL) -> SessionMeta {
         guard let data = try? Data(contentsOf: url) else {
-            return SessionMeta(title: nil, firstPrompt: nil, agentColor: nil)
+            return SessionMeta(title: nil, firstPrompt: nil, agentColor: nil, cwd: nil)
         }
         let decoder = JSONDecoder()
 
@@ -113,6 +115,7 @@ enum SessionTitle {
         var agentName: String?
         var agentColor: String?
         var firstPrompt: String?
+        var cwd: String?
 
         let newline = UInt8(ascii: "\n")
         var start = data.startIndex
@@ -121,6 +124,9 @@ enum SessionTitle {
                 if start < i {
                     let line = data[start..<i]
                     if let rec = try? decoder.decode(MetaRecord.self, from: line) {
+                        // cwd lives on user / assistant / system records; take
+                        // the first one we find — it's stable for the session.
+                        if cwd == nil, let c = rec.cwd, !c.isEmpty { cwd = c }
                         switch rec.type {
                         case "custom-title":
                             if let t = rec.customTitle, !t.isEmpty { customTitle = t }
@@ -131,10 +137,6 @@ enum SessionTitle {
                         case "agent-color":
                             if let c = rec.agentColor, !c.isEmpty { agentColor = c }
                         case "user":
-                            // First real user prompt — strip wrapping
-                            // <command-*>...</command-*> and similar blocks
-                            // that Claude Code injects, then take whatever
-                            // text the user actually typed.
                             if firstPrompt == nil,
                                rec.isMeta != true,
                                let s = rec.message?.content?.asString,
@@ -153,7 +155,8 @@ enum SessionTitle {
         return SessionMeta(
             title: customTitle ?? aiTitle ?? agentName,
             firstPrompt: firstPrompt,
-            agentColor: agentColor
+            agentColor: agentColor,
+            cwd: cwd
         )
     }
 

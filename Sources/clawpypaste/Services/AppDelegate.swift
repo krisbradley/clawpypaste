@@ -363,11 +363,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             w.makeKeyAndOrderFront(nil)
             return
         }
-        let host = NSHostingController(rootView: MainView(store: store, compact: false))
+        let host = NSHostingController(rootView: SessionBrowserView(store: store))
         let w = NSWindow(contentViewController: host)
         w.title = "clawpypaste"
         w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        w.setContentSize(NSSize(width: 600, height: 720))
+        w.setContentSize(NSSize(width: 1000, height: 640))
         w.center()
         w.isReleasedWhenClosed = false
         w.delegate = WindowDelegate.shared
