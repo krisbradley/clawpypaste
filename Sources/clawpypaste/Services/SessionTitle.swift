@@ -131,14 +131,16 @@ enum SessionTitle {
                         case "agent-color":
                             if let c = rec.agentColor, !c.isEmpty { agentColor = c }
                         case "user":
-                            // First real user prompt (skip meta records like
-                            // command caveats and skill triggers).
+                            // First real user prompt — strip wrapping
+                            // <command-*>...</command-*> and similar blocks
+                            // that Claude Code injects, then take whatever
+                            // text the user actually typed.
                             if firstPrompt == nil,
                                rec.isMeta != true,
                                let s = rec.message?.content?.asString,
-                               looksLikeRealPrompt(s)
+                               let real = extractRealPromptText(s)
                             {
-                                firstPrompt = trim(s)
+                                firstPrompt = trim(real)
                             }
                         default:
                             break
@@ -155,22 +157,35 @@ enum SessionTitle {
         )
     }
 
-    // Filter out the system-injected user records that aren't actual prompts —
-    // command captures, system reminders, slash-command output, etc.
-    private static func looksLikeRealPrompt(_ s: String) -> Bool {
-        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return false }
-        // These wrappers are injected by Claude Code, not typed by the user.
-        let skipPrefixes = [
-            "<local-command-caveat>",
-            "<command-name>",
-            "<system-reminder>",
-            "<command-message>",
-            "<command-args>",
-            "Caveat: The messages",
-        ]
-        for p in skipPrefixes where trimmed.hasPrefix(p) { return false }
-        return true
+    // Strip the system-injected XML-style wrappers that Claude Code emits
+    // around slash commands (<command-name>, <local-command-stdout>,
+    // <system-reminder>, etc.) and return whatever the user actually typed.
+    // Returns nil if the entire content is wrappers.
+    private static func extractRealPromptText(_ content: String) -> String? {
+        // Iteratively remove paired <tag>...</tag> blocks. The non-greedy
+        // `[\s\S]*?` plus `</\1>` backreference matches against the opening
+        // tag name. Loop in case nested or consecutive tag blocks remain
+        // after a single pass.
+        let pattern = "<([a-zA-Z][a-zA-Z0-9-]*)[^>]*>[\\s\\S]*?</\\1>"
+        var stripped = content
+        var previous = ""
+        while previous != stripped {
+            previous = stripped
+            stripped = stripped.replacingOccurrences(
+                of: pattern,
+                with: "",
+                options: .regularExpression
+            )
+        }
+        // Also strip leading "Caveat:" sentences that some older sessions
+        // contain without an enclosing tag.
+        stripped = stripped.replacingOccurrences(
+            of: "^Caveat: [^\\n]+\\n+",
+            with: "",
+            options: [.regularExpression, .anchored]
+        )
+        stripped = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+        return stripped.isEmpty ? nil : stripped
     }
 
     private static func trim(_ s: String) -> String {
