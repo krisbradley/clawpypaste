@@ -168,12 +168,18 @@ final class SessionStore: ObservableObject {
         rescan()
     }
 
-    // Display name for a session — the user's custom title or Claude's
-    // auto-title if available, else the friendly project path. Used in the
-    // header label and the recent-sessions dropdown.
+    // Display name for a session. Falls through:
+    //   1. /renamed custom title
+    //   2. Claude's ai-title
+    //   3. First real user prompt (first 60 chars)
+    //   4. Friendly project path
+    // The first-prompt fallback exists so home-dir sessions (which encode to
+    // a bare "~") still get a recognizable label without a custom title.
     func displayName(for info: ActiveSession.Info) -> String {
-        SessionTitle.meta(url: info.url, mtime: info.modifiedAt).title
-            ?? friendlyProjectName(info.projectDir)
+        let m = SessionTitle.meta(url: info.url, mtime: info.modifiedAt)
+        if let title = m.title { return title }
+        if let prompt = m.firstPrompt { return prompt }
+        return friendlyProjectName(info.projectDir)
     }
 
     func meta(for info: ActiveSession.Info) -> SessionMeta {
