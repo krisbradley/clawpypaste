@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 APP_NAME="clawpypaste"
 APP_BUNDLE="${APP_NAME}.app"
 BUNDLE_ID="com.kristopherbradley.${APP_NAME}"
-VERSION="0.2.2"
+VERSION="0.2.3"
 SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
 
 MODE="developer-id"
@@ -28,6 +28,14 @@ mkdir -p "${APP_BUNDLE}/Contents/Resources"
 
 cp ".build/release/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
 
+# Generate AppIcon.icns from the 🦀 emoji at all required sizes.
+echo "Generating app icon..."
+ICONSET=".build/AppIcon.iconset"
+rm -rf "${ICONSET}"
+mkdir -p "${ICONSET}"
+swift tools/gen-icon.swift "${ICONSET}" 2>&1 | sed 's/^/   /'
+iconutil -c icns "${ICONSET}" -o "${APP_BUNDLE}/Contents/Resources/AppIcon.icns"
+
 cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -37,6 +45,8 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
     <string>en</string>
     <key>CFBundleExecutable</key>
     <string>${APP_NAME}</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>${BUNDLE_ID}</string>
     <key>CFBundleInfoDictionaryVersion</key>
