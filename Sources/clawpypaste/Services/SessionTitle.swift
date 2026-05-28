@@ -15,6 +15,7 @@ struct SessionMeta: Equatable {
     let firstPrompt: String?
     let agentColor: String?
     let cwd: String?         // working directory the session was started in
+    let awaySummary: String? // Claude's auto-generated "where we are" summary
 }
 
 extension SessionMeta {
@@ -74,11 +75,13 @@ enum SessionTitle {
     // SessionRecord shape for each line.
     private struct MetaRecord: Decodable {
         let type: String
+        let subtype: String?
         let customTitle: String?
         let aiTitle: String?
         let agentName: String?
         let agentColor: String?
         let cwd: String?
+        let content: String?     // away_summary.content lives here
         let isMeta: Bool?
         let message: MessageBox?
     }
@@ -106,7 +109,7 @@ enum SessionTitle {
 
     private static func parseMeta(url: URL) -> SessionMeta {
         guard let data = try? Data(contentsOf: url) else {
-            return SessionMeta(title: nil, firstPrompt: nil, agentColor: nil, cwd: nil)
+            return SessionMeta(title: nil, firstPrompt: nil, agentColor: nil, cwd: nil, awaySummary: nil)
         }
         let decoder = JSONDecoder()
 
@@ -116,6 +119,7 @@ enum SessionTitle {
         var agentColor: String?
         var firstPrompt: String?
         var cwd: String?
+        var awaySummary: String?
 
         let newline = UInt8(ascii: "\n")
         var start = data.startIndex
@@ -144,6 +148,14 @@ enum SessionTitle {
                             {
                                 firstPrompt = trim(real)
                             }
+                        case "system":
+                            // Most recent away_summary wins — Claude writes
+                            // a fresh one as the session progresses.
+                            if rec.subtype == "away_summary",
+                               let c = rec.content, !c.isEmpty
+                            {
+                                awaySummary = c
+                            }
                         default:
                             break
                         }
@@ -156,7 +168,8 @@ enum SessionTitle {
             title: customTitle ?? aiTitle ?? agentName,
             firstPrompt: firstPrompt,
             agentColor: agentColor,
-            cwd: cwd
+            cwd: cwd,
+            awaySummary: awaySummary
         )
     }
 

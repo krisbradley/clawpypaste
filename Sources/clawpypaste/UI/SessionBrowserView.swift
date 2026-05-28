@@ -1,43 +1,95 @@
 import SwiftUI
+import AppKit
 
 // Full-size window: sidebar of every Claude Code session on disk + detail
-// pane with the selected session's blocks. Drop-in replacement for the
-// old detached MainView so the bigger window is now a session manager too.
+// pane with the selected session's blocks or conversation. Inspired by csf.
 struct SessionBrowserView: View {
     @StateObject private var browser = SessionBrowserStore()
     let store: SessionStore  // shared with the popover so pin/copy still work
+    @FocusState private var focusedField: FocusField?
+
+    enum FocusField: Hashable {
+        case sessionSearch
+        case blockSearch
+        case globalSearch
+    }
 
     var body: some View {
         NavigationSplitView {
             sessionList
         } detail: {
-            blockDetail
+            if browser.isGlobalSearching {
+                globalSearchDetail
+            } else {
+                blockDetail
+            }
         }
-        .frame(minWidth: 880, minHeight: 560)
+        .frame(minWidth: 920, minHeight: 600)
         .navigationTitle("clawpypaste")
         .onAppear { browser.refresh() }
         .toolbar { toolbar }
+        .background(keyboardShortcuts)
     }
 
     // MARK: - Sidebar
 
     private var sessionList: some View {
         VStack(spacing: 0) {
-            TextField("Search sessions…", text: $browser.search)
-                .textFieldStyle(.roundedBorder)
-                .padding(8)
+            VStack(spacing: 6) {
+                TextField("Search sessions  (/)", text: $browser.search)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .sessionSearch)
+                TextField("Search all blocks  (⌘⇧F)", text: $browser.globalSearch)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedField, equals: .globalSearch)
+                    .onChange(of: browser.globalSearch) { _ in
+                        browser.ensureGlobalIndex()
+                    }
+            }
+            .padding(8)
 
             Divider()
 
-            List(browser.filteredSessions, id: \.url, selection: $browser.selectedSessionURL) { info in
-                let meta = browser.meta(for: info)
-                SessionRow(
-                    info: info,
-                    title: browser.displayName(for: info),
-                    color: meta.swiftUIColor,
-                    cwd: meta.cwd
-                )
-                .tag(info.url)
+            List(selection: $browser.selectedSessionURL) {
+                ForEach(browser.groupedSessions) { group in
+                    Section(group.title) {
+                        ForEach(group.sessions, id: \.url) { info in
+                            let meta = browser.meta(for: info)
+                            SessionRow(
+                                info: info,
+                                title: browser.displayName(for: info),
+                                color: meta.swiftUIColor,
+                                cwd: meta.cwd,
+                                summary: meta.awaySummary,
+                                buckets: nil
+                            )
+                            .tag(info.url)
+                            .contextMenu {
+                                Button("Resume in iTerm") {
+                                    SessionResumer.resume(sessionURL: info.url, cwd: meta.cwd)
+                                }
+                                Divider()
+                                Button("Reveal in Finder") {
+                                    NSWorkspace.shared.activateFileViewerSelecting([info.url])
+                                }
+                                Button("Copy session ID") {
+                                    let id = info.url.deletingPathExtension().lastPathComponent
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(id, forType: .string)
+                                }
+                                Button("Export as markdown…") {
+                                    browser.select(info.url)
+                                    DispatchQueue.main.async { browser.exportMarkdown() }
+                                }
+                                Divider()
+                                Button("Delete…", role: .destructive) {
+                                    browser.select(info.url)
+                                    DispatchQueue.main.async { browser.deleteCurrent() }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             .listStyle(.sidebar)
 
@@ -48,30 +100,154 @@ struct SessionBrowserView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Button {
-                    browser.refresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-                .buttonStyle(.borderless)
-                .help("Re-scan sessions")
+                Button { browser.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(.borderless)
+                    .help("Re-scan sessions")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
         }
-        .frame(minWidth: 300)
+        .frame(minWidth: 320)
     }
 
-    // MARK: - Detail
+    // MARK: - Detail (blocks)
 
     private var blockDetail: some View {
         VStack(spacing: 0) {
             detailHeader
             Divider()
-            blockFilterBar
+            modePicker
             Divider()
+            if browser.detailMode == .blocks {
+                blockListPane
+            } else {
+                conversationPane
+            }
+        }
+    }
+
+    private var detailHeader: some View {
+        let info = browser.sessions.first(where: { $0.url == browser.selectedSessionURL })
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                if let info = info {
+                    let meta = browser.meta(for: info)
+                    if let color = meta.swiftUIColor {
+                        Circle().fill(color).frame(width: 10, height: 10)
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(browser.displayName(for: info))
+                            .font(.system(size: 14, weight: .semibold))
+                            .lineLimit(1)
+                        if let cwd = meta.cwd {
+                            Text(friendlyPath(cwd))
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    Spacer()
+                    statBadges
+                } else {
+                    Text("Pick a session")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            }
+            // Claude's own summary if it wrote one — usually a much better
+            // sense of the session than the first prompt alone.
+            if let info = info,
+               let summary = browser.meta(for: info).awaySummary,
+               !summary.isEmpty
+            {
+                Text(summary)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.gray.opacity(0.08))
+                    .cornerRadius(6)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private var statBadges: some View {
+        HStack(spacing: 6) {
+            statBadge(systemImage: "person.fill", value: browser.stats.userTurns, label: "user")
+            statBadge(systemImage: "sparkles", value: browser.stats.assistantTurns, label: "asst")
+            statBadge(systemImage: "wrench", value: browser.stats.toolCalls, label: "tools")
+            if let dur = browser.stats.durationLabel {
+                Text(dur)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.gray.opacity(0.15))
+                    .clipShape(Capsule())
+            }
+        }
+    }
+
+    private func statBadge(systemImage: String, value: Int, label: String) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .font(.system(size: 9))
+            Text("\(value)")
+                .font(.system(size: 10, weight: .medium))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Color.gray.opacity(0.15))
+        .clipShape(Capsule())
+        .foregroundStyle(.secondary)
+        .help("\(value) \(label) message\(value == 1 ? "" : "s")")
+    }
+
+    private var modePicker: some View {
+        HStack {
+            Picker("", selection: $browser.detailMode) {
+                ForEach(SessionBrowserStore.DetailMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 240)
+
+            Spacer()
+
+            if browser.detailMode == .blocks {
+                TextField("Filter blocks  (⌘F)", text: $browser.blockSearch)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 200)
+                    .focused($focusedField, equals: .blockSearch)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var blockListPane: some View {
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    chip(nil, label: "All")
+                    ForEach(BlockKind.allCases, id: \.self) { k in
+                        chip(k, label: k.label)
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .padding(.bottom, 6)
+
+            Divider()
+
             if browser.filteredBlocks.isEmpty {
-                emptyDetail
+                emptyDetail("No blocks")
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
@@ -94,60 +270,6 @@ struct SessionBrowserView: View {
         }
     }
 
-    private var detailHeader: some View {
-        HStack(spacing: 10) {
-            if let url = browser.selectedSessionURL,
-               let info = browser.sessions.first(where: { $0.url == url })
-            {
-                let meta = browser.meta(for: info)
-                if let color = meta.swiftUIColor {
-                    Circle().fill(color).frame(width: 10, height: 10)
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(browser.displayName(for: info))
-                        .font(.system(size: 14, weight: .semibold))
-                        .lineLimit(1)
-                    if let cwd = meta.cwd {
-                        Text(cwd.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
-                Spacer()
-                Text(timeAgo(info.modifiedAt))
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            } else {
-                Text("Pick a session")
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-    }
-
-    private var blockFilterBar: some View {
-        HStack(spacing: 8) {
-            TextField("Filter blocks", text: $browser.blockSearch)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 260)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    chip(nil, label: "All")
-                    ForEach(BlockKind.allCases, id: \.self) { k in
-                        chip(k, label: k.label)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-    }
-
     private func chip(_ kind: BlockKind?, label: String) -> some View {
         let isActive = browser.blockKindFilter == kind
         return Button(action: { browser.blockKindFilter = kind }) {
@@ -161,40 +283,122 @@ struct SessionBrowserView: View {
         .buttonStyle(.plain)
     }
 
-    private var emptyDetail: some View {
+    // MARK: - Detail (conversation)
+
+    private var conversationPane: some View {
+        Group {
+            if browser.conversation.isEmpty {
+                emptyDetail("No messages")
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(browser.conversation) { msg in
+                            ConversationBubble(message: msg)
+                                .frame(maxWidth: .infinity, alignment: msg.role == .user ? .trailing : .leading)
+                        }
+                    }
+                    .padding(12)
+                }
+            }
+        }
+    }
+
+    // MARK: - Detail (global search)
+
+    private var globalSearchDetail: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                Text("Searching all sessions for ").foregroundColor(.secondary)
+                    + Text("\"\(browser.globalSearch)\"").fontWeight(.medium)
+                Spacer()
+                if HistoryStore.shared.isLoading {
+                    ProgressView().controlSize(.mini)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .font(.system(size: 12))
+
+            Divider()
+
+            let results = browser.globalSearchResults
+            if results.isEmpty {
+                emptyDetail(HistoryStore.shared.isLoading ? "Indexing…" : "No matches")
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(results) { block in
+                            BlockRow(
+                                block: block,
+                                isRecentlyCopied: store.recentlyCopiedId == block.id,
+                                isPinned: store.isPinned(block),
+                                isSelected: false,
+                                onCopy: { store.copy(block) },
+                                onCopyAs: { text in store.copy(block, asText: text) },
+                                onTogglePin: { store.togglePin(block) },
+                                onInject: { store.inject(block) }
+                            )
+                            Divider()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func emptyDetail(_ message: String) -> some View {
         VStack {
             Spacer()
-            Text("No blocks")
-                .foregroundStyle(.secondary)
+            Text(message).foregroundStyle(.secondary)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Toolbar
+    // MARK: - Toolbar + keyboard
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .primaryAction) {
-            Button {
-                browser.resume()
-            } label: {
-                Label("Resume in iTerm", systemImage: "play.fill")
+            Button { browser.resume() } label: {
+                Label("Resume", systemImage: "play.fill")
             }
             .disabled(browser.selectedSessionURL == nil)
-            .help("Open a new iTerm tab and run claude --resume")
+            .help("Open a new iTerm tab and run claude --resume (⌘↩)")
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button { browser.revealInFinder() } label: {
+                Label("Finder", systemImage: "folder")
+            }
+            .disabled(browser.selectedSessionURL == nil)
         }
     }
 
-    private func timeAgo(_ date: Date) -> String {
-        let delta = Date().timeIntervalSince(date)
-        if delta < 60       { return "now" }
-        if delta < 3600     { return "\(Int(delta / 60))m ago" }
-        if delta < 86400    { return "\(Int(delta / 3600))h ago" }
-        if delta < 604800   { return "\(Int(delta / 86400))d ago" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter.string(from: date)
+    private var keyboardShortcuts: some View {
+        Group {
+            Button("") { browser.moveSelection(by: 1) }.keyboardShortcut(.downArrow, modifiers: [])
+            Button("") { browser.moveSelection(by: -1) }.keyboardShortcut(.upArrow, modifiers: [])
+            Button("") { browser.moveSelection(by: 10) }.keyboardShortcut(.downArrow, modifiers: [.shift])
+            Button("") { browser.moveSelection(by: -10) }.keyboardShortcut(.upArrow, modifiers: [.shift])
+            Button("") { browser.resume() }.keyboardShortcut(.return, modifiers: [.command])
+            Button("") { browser.deleteCurrent() }.keyboardShortcut("d", modifiers: [.command])
+            Button("") { focusedField = .sessionSearch }.keyboardShortcut("/", modifiers: [])
+            Button("") { focusedField = .blockSearch }.keyboardShortcut("f", modifiers: [.command])
+            Button("") { focusedField = .globalSearch }.keyboardShortcut("f", modifiers: [.command, .shift])
+            Button("") { browser.detailMode = .blocks }.keyboardShortcut("1", modifiers: [.command])
+            Button("") { browser.detailMode = .conversation }.keyboardShortcut("2", modifiers: [.command])
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+    }
+
+    private func friendlyPath(_ path: String) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if path.hasPrefix(home) {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
     }
 }
 
@@ -205,6 +409,8 @@ private struct SessionRow: View {
     let title: String
     let color: Color?
     let cwd: String?
+    let summary: String?
+    let buckets: [Int]?
 
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
@@ -228,6 +434,12 @@ private struct SessionRow: View {
                         .truncationMode(.middle)
                 }
             }
+            Spacer()
+            if let buckets = buckets, !buckets.isEmpty {
+                Sparkline(values: buckets)
+                    .frame(width: 48, height: 14)
+                    .foregroundStyle(.tertiary)
+            }
         }
         .padding(.vertical, 2)
     }
@@ -238,5 +450,63 @@ private struct SessionRow: View {
             return "~" + path.dropFirst(home.count)
         }
         return path
+    }
+}
+
+// MARK: - Conversation bubble
+
+private struct ConversationBubble: View {
+    let message: ConversationMessage
+
+    var body: some View {
+        VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Image(systemName: message.role == .user ? "person.fill" : "sparkles")
+                    .font(.system(size: 9))
+                Text(message.role == .user ? "User" : "Assistant")
+                    .font(.system(size: 10, weight: .semibold))
+                if !message.toolCalls.isEmpty {
+                    Text("• \(message.toolCalls.joined(separator: ", "))")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(.secondary)
+
+            if !message.text.isEmpty {
+                Text(MarkdownRenderer.render(String(message.text.prefix(2000))))
+                    .font(.system(size: 12))
+                    .padding(10)
+                    .background(message.role == .user
+                                ? Color.accentColor.opacity(0.12)
+                                : Color.gray.opacity(0.10))
+                    .cornerRadius(8)
+                    .frame(maxWidth: 720, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+}
+
+// MARK: - Sparkline
+
+private struct Sparkline: View {
+    let values: [Int]
+
+    var body: some View {
+        GeometryReader { geo in
+            let maxV = max(values.max() ?? 0, 1)
+            let step = geo.size.width / CGFloat(max(values.count - 1, 1))
+            Path { p in
+                for (i, v) in values.enumerated() {
+                    let x = CGFloat(i) * step
+                    let y = geo.size.height * (1 - CGFloat(v) / CGFloat(maxV))
+                    if i == 0 { p.move(to: CGPoint(x: x, y: y)) }
+                    else { p.addLine(to: CGPoint(x: x, y: y)) }
+                }
+            }
+            .stroke(Color.secondary.opacity(0.6), lineWidth: 1)
+        }
     }
 }
