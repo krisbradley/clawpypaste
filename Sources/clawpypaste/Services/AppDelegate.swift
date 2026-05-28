@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Carbon.HIToolbox
 import ApplicationServices
+import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -18,6 +19,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wireAutoDismiss()
         wireInject()
         wireGlobalHotKey()
+        // Request notification permission up front so the "Screenshot ready"
+        // banner can actually appear later without an inline auth race.
+        UNUserNotificationCenter.current().requestAuthorization(
+            options: [.alert, .sound]
+        ) { _, _ in }
     }
 
     // The app that was frontmost just before our popover/menu stole focus.

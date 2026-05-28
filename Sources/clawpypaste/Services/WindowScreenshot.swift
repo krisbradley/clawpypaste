@@ -92,19 +92,23 @@ final class WindowScreenshotCoordinator {
             let ok = app.activate(options: [.activateAllWindows])
             NSLog("screenshot: activate(\(targetName)) returned \(ok)")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                Self.postCommandV()
-                NSLog("screenshot: ⌘V posted")
+                // Claude Code's TUI binds Ctrl+V for image paste because
+                // iTerm2 intercepts Cmd+V for text paste and silently drops
+                // it when the clipboard holds only an image. Ctrl+V passes
+                // straight through to the running TUI.
+                Self.postControlV()
+                NSLog("screenshot: ⌃V posted")
             }
         }
     }
 
     private func notify(target: String) {
         let content = UNMutableNotificationContent()
-        content.title = "Screenshot ready"
-        content.body = "Pasting into \(target). If it doesn't appear, switch to your terminal and ⌘V."
+        content.title = "Screenshot on clipboard"
+        content.body = "Pasting into \(target) with ⌃V. If it doesn't appear, press ⌃V in your Claude prompt manually."
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
-            UNUserNotificationCenter.current().add(req)
+        UNUserNotificationCenter.current().add(req) { err in
+            if let err = err { NSLog("notify failed: \(err)") }
         }
     }
 
@@ -160,14 +164,14 @@ final class WindowScreenshotCoordinator {
         up.post(tap: .cghidEventTap)
     }
 
-    private static func postCommandV() {
+    private static func postControlV() {
         let src = CGEventSource(stateID: .hidSystemState)
         guard
             let vDown = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
             let vUp = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
         else { return }
-        vDown.flags = .maskCommand
-        vUp.flags = .maskCommand
+        vDown.flags = .maskControl
+        vUp.flags = .maskControl
         vDown.post(tap: .cghidEventTap)
         vUp.post(tap: .cghidEventTap)
     }
