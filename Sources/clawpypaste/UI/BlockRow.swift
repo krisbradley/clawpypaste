@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct BlockRow: View {
     let block: Block
@@ -34,7 +35,7 @@ struct BlockRow: View {
             .buttonStyle(.plain)
             .help(isPinned ? "Unpin" : "Pin")
 
-            Button(action: onCopy) {
+            Button(action: handlePrimaryAction) {
                 HStack(alignment: .top, spacing: 10) {
                     kindBadge
                     VStack(alignment: .leading, spacing: 3) {
@@ -44,6 +45,7 @@ struct BlockRow: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
+                        sourceSessionChip
                         previewBody
                             .frame(maxWidth: .infinity, alignment: .leading)
                         HStack(spacing: 6) {
@@ -105,11 +107,97 @@ struct BlockRow: View {
         }
     }
 
+    // Small "from session …" chip with a colored dot, shown in history
+    // mode so the user can tell where each block came from.
+    @ViewBuilder
+    private var sourceSessionChip: some View {
+        if let src = block.sourceSession {
+            HStack(spacing: 4) {
+                if let color = sessionColor(src.agentColor) {
+                    Circle().fill(color).frame(width: 6, height: 6)
+                }
+                Text(src.title ?? "(untitled session)")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+        }
+    }
+
+    private func sessionColor(_ raw: String?) -> Color? {
+        guard let raw = raw?.lowercased() else { return nil }
+        switch raw {
+        case "red":           return .red
+        case "orange":        return .orange
+        case "yellow":        return .yellow
+        case "green":         return .green
+        case "mint", "teal":  return .mint
+        case "cyan":          return .cyan
+        case "blue":          return .blue
+        case "indigo":        return .indigo
+        case "purple":        return .purple
+        case "pink":          return .pink
+        case "brown":         return .brown
+        case "gray", "grey":  return .gray
+        default:              return nil
+        }
+    }
+
+    // MARK: - Smart click on path / URL
+
+    // Default click on a path opens it in Finder; URL opens in the browser.
+    // Other kinds copy. Holding ⌘ on path/URL falls back to copy so you can
+    // still grab the literal text when you need it.
+    private func handlePrimaryAction() {
+        let cmdHeld = NSEvent.modifierFlags.contains(.command)
+        switch block.kind {
+        case .path where !cmdHeld:
+            openPath(block.content)
+        case .url where !cmdHeld:
+            openURL(block.content)
+        default:
+            onCopy()
+        }
+    }
+
+    private func openPath(_ raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip ":line" or ":line:col" suffixes Claude often appends.
+        let cleaned = trimmed.replacingOccurrences(
+            of: ":\\d+(:\\d+)?$",
+            with: "",
+            options: .regularExpression
+        )
+        let expanded = (cleaned as NSString).expandingTildeInPath
+        if FileManager.default.fileExists(atPath: expanded) {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: expanded)])
+        } else {
+            onCopy()
+        }
+    }
+
+    private func openURL(_ raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed) else { onCopy(); return }
+        NSWorkspace.shared.open(url)
+    }
+
     // MARK: - Right-click menu
 
     @ViewBuilder
     private var contextMenu: some View {
-        Button("Copy") { onCopy() }
+        if block.kind == .path {
+            Button("Open in Finder") { openPath(block.content) }
+            Button("Copy path") { onCopy() }
+            Divider()
+        } else if block.kind == .url {
+            Button("Open in browser") { openURL(block.content) }
+            Button("Copy URL") { onCopy() }
+            Divider()
+        } else {
+            Button("Copy") { onCopy() }
+        }
 
         if SnippetEngine.hasPlaceholders(block.content) {
             Button("Fill in values…") { showingSnippetSheet = true }

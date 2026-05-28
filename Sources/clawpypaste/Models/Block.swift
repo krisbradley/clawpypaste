@@ -26,6 +26,14 @@ enum BlockKind: String, CaseIterable, Codable {
     }
 }
 
+// Compact reference to the session a history block came from. Only set
+// when viewing blocks across all sessions, otherwise nil.
+struct SourceSessionRef: Hashable {
+    let url: URL
+    let title: String?
+    let agentColor: String?
+}
+
 struct Block: Identifiable, Hashable {
     let id: String                  // content hash + kind, stable across re-parses
     let kind: BlockKind
@@ -34,6 +42,7 @@ struct Block: Identifiable, Hashable {
     let title: String?              // for sections: the heading; for tools: tool name
     let turnIndex: Int              // sequence position in the session
     let timestamp: Date?
+    var sourceSession: SourceSessionRef? = nil  // populated only in history mode
 
     var preview: String {
         let firstLine = content.split(whereSeparator: \.isNewline).first.map(String.init) ?? content

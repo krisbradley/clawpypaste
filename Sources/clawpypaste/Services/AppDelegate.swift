@@ -34,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Coordinator for the no-Screen-Recording-permission window-shot flow.
     private let screenshotCoordinator = WindowScreenshotCoordinator()
 
+    // Second hotkey, for the screenshot-to-Claude shortcut.
+    private var screenshotHotKey: GlobalHotKey?
+
     // MARK: - Status item
 
     private func setupStatusItem() {
@@ -44,6 +47,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.target = self
         button.action = #selector(handleStatusItemClick(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
+        // Drop target overlay — turns the icon into a "send to Claude" sink.
+        let drop = MenuBarDropTarget(frame: button.bounds)
+        drop.autoresizingMask = [.width, .height]
+        drop.onDropImage = { [weak self] img in self?.handleDroppedImage(img) }
+        drop.onDropText = { [weak self] text in self?.handleDroppedText(text) }
+        drop.onDropFileURL = { [weak self] url in self?.handleDroppedFileURL(url) }
+        button.addSubview(drop)
+    }
+
+    // MARK: - Drop handlers
+
+    private func handleDroppedImage(_ image: NSImage) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.writeObjects([image])
+        sendToClaudeTerminal(useControlV: true)
+    }
+
+    private func handleDroppedText(_ text: String) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        sendToClaudeTerminal(useControlV: false)
+    }
+
+    private func handleDroppedFileURL(_ url: URL) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        // For non-image files, paste the absolute path as text — Claude Code's
+        // TUI accepts file references that way (typed or pasted).
+        pb.setString(url.path, forType: .string)
+        sendToClaudeTerminal(useControlV: false)
+    }
+
+    // Find a running terminal app and route paste there. Falls back to the
+    // previously-frontmost app, then to whatever's frontmost right now.
+    private func sendToClaudeTerminal(useControlV: Bool) {
+        let target = findTerminalApp() ?? previousFrontmostApp ?? NSWorkspace.shared.frontmostApplication
+        guard let app = target,
+              app.bundleIdentifier != Bundle.main.bundleIdentifier
+        else { return }
+        app.activate(options: [.activateAllWindows])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            if useControlV {
+                Self.postControlV()
+            } else {
+                Self.postCommandV()
+            }
+        }
+    }
+
+    private func findTerminalApp() -> NSRunningApplication? {
+        let bundles: Set<String> = [
+            "com.googlecode.iterm2",
+            "com.apple.Terminal",
+            "dev.warp.Warp-Stable",
+            "dev.warp.Warp",
+            "com.mitchellh.ghostty",
+            "io.alacritty",
+            "net.kovidgoyal.kitty",
+            "co.zeit.hyper",
+        ]
+        return NSWorkspace.shared.runningApplications.first { running in
+            guard let id = running.bundleIdentifier else { return false }
+            return bundles.contains(id)
+        }
+    }
+
+    private static func postControlV() {
+        let src = CGEventSource(stateID: .hidSystemState)
+        guard
+            let vDown = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
+            let vUp = CGEvent(keyboardEventSource: src, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false)
+        else { return }
+        vDown.flags = .maskControl
+        vUp.flags = .maskControl
+        vDown.post(tap: .cghidEventTap)
+        vUp.post(tap: .cghidEventTap)
     }
 
     @objc private func handleStatusItemClick(_ sender: Any?) {
@@ -66,6 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showContextMenu() {
         let menu = NSMenu()
         menu.addItem(withTitle: "Send window to Claude…", action: #selector(sendWindowToClaude), keyEquivalent: "s")
+            .target = self
+        menu.addItem(withTitle: "Send region to Claude…", action: #selector(sendRegionToClaude), keyEquivalent: "r")
             .target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Open window", action: #selector(openDetachedWindow), keyEquivalent: "")
@@ -188,6 +272,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey = GlobalHotKey(keyCode: UInt32(kVK_ANSI_V), modifiers: controlKey | optionKey) { [weak self] in
             DispatchQueue.main.async { self?.togglePopover() }
         }
+        // Ctrl+Opt+S — send window screenshot to Claude.
+        screenshotHotKey = GlobalHotKey(keyCode: UInt32(kVK_ANSI_S), modifiers: controlKey | optionKey) { [weak self] in
+            DispatchQueue.main.async {
+                self?.captureFrontmostApp()
+                self?.sendWindowToClaude()
+            }
+        }
     }
 
     // MARK: - Detached window
@@ -220,7 +311,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quit() { NSApp.terminate(nil) }
 
     @objc private func sendWindowToClaude() {
-        screenshotCoordinator.capture(target: previousFrontmostApp)
+        screenshotCoordinator.capture(target: previousFrontmostApp, mode: .window)
+    }
+
+    @objc private func sendRegionToClaude() {
+        screenshotCoordinator.capture(target: previousFrontmostApp, mode: .region)
     }
 }
 

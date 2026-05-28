@@ -70,7 +70,16 @@ final class HistoryStore: ObservableObject {
                 } else {
                     continue
                 }
-                for b in fileBlocks where allBlocks[b.id] == nil {
+                // Stamp each block with its source session so the UI can
+                // show a session chip in history mode.
+                let meta = SessionTitle.meta(url: file, mtime: mtime)
+                let ref = SourceSessionRef(
+                    url: file,
+                    title: meta.title ?? meta.firstPrompt,
+                    agentColor: meta.agentColor
+                )
+                for var b in fileBlocks where allBlocks[b.id] == nil {
+                    b.sourceSession = ref
                     allBlocks[b.id] = b
                 }
             }

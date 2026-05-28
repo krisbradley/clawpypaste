@@ -25,10 +25,15 @@ final class WindowScreenshotCoordinator {
     private var deadline: Date = Date()
     private weak var targetApp: NSRunningApplication?
 
-    func capture(target: NSRunningApplication?) {
+    enum Mode {
+        case window     // ⌃⇧⌘4 + Space (system window-selection mode)
+        case region     // ⌃⇧⌘4 alone (system region-selection mode)
+    }
+
+    func capture(target: NSRunningApplication?, mode: Mode = .window) {
         let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(opts) else {
-            NSLog("screenshot: accessibility not granted — image will land on clipboard for manual ⌘V")
+            NSLog("screenshot: accessibility not granted — image will land on clipboard for manual ⌃V")
             return
         }
 
@@ -38,8 +43,10 @@ final class WindowScreenshotCoordinator {
         deadline = Date().addingTimeInterval(25)
 
         postCtrlShiftCmd4()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
-            self?.postSpace()
+        if mode == .window {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+                self?.postSpace()
+            }
         }
 
         timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] t in
