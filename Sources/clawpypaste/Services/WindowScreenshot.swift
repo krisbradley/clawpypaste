@@ -27,21 +27,20 @@ final class WindowScreenshotCoordinator {
     func capture(target: NSRunningApplication?) {
         let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(opts) else {
-            NSLog("screenshot: accessibility not granted")
+            NSLog("screenshot: accessibility not granted — image will land on clipboard for manual ⌘V")
             return
         }
 
         cancel()
         targetApp = target
         initialChangeCount = NSPasteboard.general.changeCount
-        deadline = Date().addingTimeInterval(20)
+        deadline = Date().addingTimeInterval(25)
 
         postCtrlShiftCmd4()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
             self?.postSpace()
         }
 
-        // Poll clipboard every 200ms looking for the resulting image.
         timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] t in
             guard let self = self else { t.invalidate(); return }
             self.tick()
@@ -72,13 +71,55 @@ final class WindowScreenshotCoordinator {
     }
 
     private func pasteToTarget() {
-        if let app = targetApp, app.bundleIdentifier != Bundle.main.bundleIdentifier {
+        // Pick the best paste target:
+        //   1. The app we captured at menu-open time (usually right — the
+        //      user's terminal with Claude). But if it was System Settings
+        //      or the Finder or clawpypaste itself, skip it.
+        //   2. Otherwise, whatever's frontmost RIGHT NOW. After the system
+        //      screenshot completes, macOS typically restores focus to where
+        //      it was before the screenshot UI engaged — usually a sane
+        //      target.
+        let candidate = preferredTarget()
+
+        if let app = candidate {
+            NSLog("screenshot: pasting into \(app.localizedName ?? app.bundleIdentifier ?? "?")")
             app.activate(options: [])
+        } else {
+            NSLog("screenshot: no safe paste target — leaving image on clipboard for manual ⌘V")
+            return
         }
-        // Give the focus shift a tick before pasting.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+        // Longer delay than Inject — the system screenshot UI sometimes
+        // takes a beat to release focus cleanly.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             Self.postCommandV()
         }
+    }
+
+    // Pick the right target app to paste into. The right-click-captured app
+    // is usually correct, but if the user just came back from System
+    // Settings (e.g. they granted Accessibility), it could be wrong.
+    private func preferredTarget() -> NSRunningApplication? {
+        let myBundle = Bundle.main.bundleIdentifier
+        let skipBundles: Set<String> = [
+            myBundle ?? "",
+            "com.apple.systempreferences",
+            "com.apple.SystemPreferences",
+            "com.apple.finder",
+            "com.apple.systemuiserver",
+        ]
+        if let app = targetApp,
+           let id = app.bundleIdentifier,
+           !skipBundles.contains(id)
+        {
+            return app
+        }
+        if let fm = NSWorkspace.shared.frontmostApplication,
+           let id = fm.bundleIdentifier,
+           !skipBundles.contains(id)
+        {
+            return fm
+        }
+        return nil
     }
 
     // MARK: - Synthetic key events
