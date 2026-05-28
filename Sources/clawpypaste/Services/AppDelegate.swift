@@ -109,49 +109,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // previously-frontmost app, then to whatever's frontmost right now.
     private func sendToClaudeTerminal(useControlV: Bool) {
         let target = findTerminalApp() ?? previousFrontmostApp ?? NSWorkspace.shared.frontmostApplication
+        Self.fileLog("sendToClaudeTerminal: target = \(target?.localizedName ?? "<nil>"), bundleID = \(target?.bundleIdentifier ?? "<nil>")")
         guard let app = target,
               app.bundleIdentifier != Bundle.main.bundleIdentifier,
               let bundleID = app.bundleIdentifier
-        else { return }
+        else {
+            Self.fileLog("sendToClaudeTerminal: bailing — no usable target")
+            return
+        }
 
-        // Activation strategy chosen by elimination:
-        //   - NSRunningApplication.activate(options:) is silently no-op'd
-        //     for background apps on macOS 14+ (cooperative activation)
-        //   - NSWorkspace.openApplication launches as if double-clicked,
-        //     which makes iTerm2 spawn a fresh window
-        //   - AppleScript "activate" sends a proper Activate Apple Event
-        //     that brings the existing process to front without opening a
-        //     new window. First use triggers a one-time Automation prompt.
         let source = "tell application id \"\(bundleID)\" to activate"
         if let script = NSAppleScript(source: source) {
             var error: NSDictionary?
-            script.executeAndReturnError(&error)
+            let result = script.executeAndReturnError(&error)
+            Self.fileLog("AppleScript result: descriptorType=\(result.descriptorType), error=\(error.map { "\($0)" } ?? "<nil>")")
+        } else {
+            Self.fileLog("NSAppleScript init returned nil")
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             if useControlV {
                 Self.postControlV()
+                Self.fileLog("posted ⌃V")
             } else {
                 Self.postCommandV()
+                Self.fileLog("posted ⌘V")
             }
         }
     }
 
-    private func findTerminalApp() -> NSRunningApplication? {
-        let bundles: Set<String> = [
-            "com.googlecode.iterm2",
-            "com.apple.Terminal",
-            "dev.warp.Warp-Stable",
-            "dev.warp.Warp",
-            "com.mitchellh.ghostty",
-            "io.alacritty",
-            "net.kovidgoyal.kitty",
-            "co.zeit.hyper",
-        ]
-        return NSWorkspace.shared.runningApplications.first { running in
-            guard let id = running.bundleIdentifier else { return false }
-            return bundles.contains(id)
+    // NSLog from notarized Swift apps is filtered out of `log show`, so we
+    // write diagnostic output to a file we can tail.
+    static func fileLog(_ msg: String) {
+        let path = NSString(string: "~/Library/Logs/clawpypaste.log").expandingTildeInPath
+        let line = "[\(Date())] \(msg)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if let fh = FileHandle(forWritingAtPath: path) {
+            fh.seekToEndOfFile()
+            fh.write(data)
+            try? fh.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: path))
         }
+    }
+
+    // Ordered by preference. Terminal.app is last because macOS often has it
+    // running in the background even when the user is actually working in
+    // iTerm2 / Warp / Ghostty / etc. — picking it would activate an
+    // invisible Terminal window and silently swallow the paste.
+    private static let preferredTerminalBundleIDs: [String] = [
+        "com.googlecode.iterm2",
+        "dev.warp.Warp-Stable",
+        "dev.warp.Warp",
+        "com.mitchellh.ghostty",
+        "io.alacritty",
+        "net.kovidgoyal.kitty",
+        "co.zeit.hyper",
+        "com.apple.Terminal",
+    ]
+
+    private func findTerminalApp() -> NSRunningApplication? {
+        // If the frontmost app is itself a terminal (rare during a drag,
+        // common for the inject + popover paths), honor that first.
+        if let front = NSWorkspace.shared.frontmostApplication,
+           let id = front.bundleIdentifier,
+           Self.preferredTerminalBundleIDs.contains(id)
+        {
+            return front
+        }
+        let running = NSWorkspace.shared.runningApplications
+        for bundleID in Self.preferredTerminalBundleIDs {
+            if let app = running.first(where: { $0.bundleIdentifier == bundleID }) {
+                return app
+            }
+        }
+        return nil
     }
 
     private static func postControlV() {

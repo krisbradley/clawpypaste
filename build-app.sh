@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 APP_NAME="clawpypaste"
 APP_BUNDLE="${APP_NAME}.app"
 BUNDLE_ID="com.kristopherbradley.${APP_NAME}"
-VERSION="0.2.12"
+VERSION="0.2.13"
 SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
 
 MODE="developer-id"
@@ -73,13 +73,17 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-# Empty entitlements file is fine — non-sandboxed app with no special needs.
+# Hardened runtime blocks Apple Events by default; the
+# automation.apple-events entitlement lets the app send them (the user
+# still has to approve each target app via the standard Automation prompt).
 ENTITLEMENTS="$(mktemp -t clawpypaste-entitlements).plist"
 cat > "${ENTITLEMENTS}" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
 </dict>
 </plist>
 EOF
