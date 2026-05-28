@@ -111,23 +111,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let target = findTerminalApp() ?? previousFrontmostApp ?? NSWorkspace.shared.frontmostApplication
         guard let app = target,
               app.bundleIdentifier != Bundle.main.bundleIdentifier,
-              let bundleURL = app.bundleURL
+              let bundleID = app.bundleIdentifier
         else { return }
 
-        // NSRunningApplication.activate(options:) is silently no-op'd for
-        // background apps on macOS 14+ unless the call follows a foreground
-        // user interaction (cooperative activation rules). A drop on the
-        // status item doesn't qualify, but NSWorkspace.openApplication
-        // goes through LaunchServices and isn't subject to those rules.
-        let config = NSWorkspace.OpenConfiguration()
-        config.activates = true
-        NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                if useControlV {
-                    Self.postControlV()
-                } else {
-                    Self.postCommandV()
-                }
+        // Activation strategy chosen by elimination:
+        //   - NSRunningApplication.activate(options:) is silently no-op'd
+        //     for background apps on macOS 14+ (cooperative activation)
+        //   - NSWorkspace.openApplication launches as if double-clicked,
+        //     which makes iTerm2 spawn a fresh window
+        //   - AppleScript "activate" sends a proper Activate Apple Event
+        //     that brings the existing process to front without opening a
+        //     new window. First use triggers a one-time Automation prompt.
+        let source = "tell application id \"\(bundleID)\" to activate"
+        if let script = NSAppleScript(source: source) {
+            var error: NSDictionary?
+            script.executeAndReturnError(&error)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            if useControlV {
+                Self.postControlV()
+            } else {
+                Self.postCommandV()
             }
         }
     }

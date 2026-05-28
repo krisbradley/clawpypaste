@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 APP_NAME="clawpypaste"
 APP_BUNDLE="${APP_NAME}.app"
 BUNDLE_ID="com.kristopherbradley.${APP_NAME}"
-VERSION="0.2.11"
+VERSION="0.2.12"
 SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
 
 MODE="developer-id"
@@ -65,6 +65,8 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" <<EOF
     <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>clawpypaste needs to control your terminal to paste dropped files into your Claude Code prompt.</string>
     <key>NSHumanReadableCopyright</key>
     <string></string>
 </dict>
