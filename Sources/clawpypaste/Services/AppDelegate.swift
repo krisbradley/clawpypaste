@@ -109,22 +109,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // previously-frontmost app, then to whatever's frontmost right now.
     private func sendToClaudeTerminal(useControlV: Bool) {
         let target = findTerminalApp() ?? previousFrontmostApp ?? NSWorkspace.shared.frontmostApplication
-        NSLog("drop: target = \(target?.localizedName ?? "<nil>"), useControlV = \(useControlV)")
         guard let app = target,
-              app.bundleIdentifier != Bundle.main.bundleIdentifier
-        else {
-            NSLog("drop: no target app available; clipboard ready for manual paste")
-            return
-        }
-        let ok = app.activate(options: [.activateAllWindows])
-        NSLog("drop: activate(\(app.localizedName ?? "?")) returned \(ok)")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            if useControlV {
-                Self.postControlV()
-                NSLog("drop: ⌃V posted")
-            } else {
-                Self.postCommandV()
-                NSLog("drop: ⌘V posted")
+              app.bundleIdentifier != Bundle.main.bundleIdentifier,
+              let bundleURL = app.bundleURL
+        else { return }
+
+        // NSRunningApplication.activate(options:) is silently no-op'd for
+        // background apps on macOS 14+ unless the call follows a foreground
+        // user interaction (cooperative activation rules). A drop on the
+        // status item doesn't qualify, but NSWorkspace.openApplication
+        // goes through LaunchServices and isn't subject to those rules.
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                if useControlV {
+                    Self.postControlV()
+                } else {
+                    Self.postCommandV()
+                }
             }
         }
     }
