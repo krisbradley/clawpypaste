@@ -76,9 +76,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleDroppedFileURL(_ url: URL) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        // For non-image files, paste the absolute path as text — Claude Code's
-        // TUI accepts file references that way (typed or pasted).
-        pb.setString(url.path, forType: .string)
+        // Claude Code's TUI uses the `@path` convention to actually *read*
+        // a referenced file. Without the leading `@` the pasted path is
+        // just literal characters in the prompt. With the `@`, Claude
+        // attaches the file (text, PDF, docx, etc.) as context.
+        pb.setString("@\(url.path) ", forType: .string)
         sendToClaudeTerminal(useControlV: false)
     }
 
