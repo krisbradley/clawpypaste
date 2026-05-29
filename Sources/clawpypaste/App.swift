@@ -33,6 +33,10 @@ struct ClawpypasteApp: App {
     }
 
     var body: some Scene {
-        Settings { PreferencesView() }
+        // No real Scene needed — AppDelegate manages the menu bar item, the
+        // detached browser window, and the preferences window as plain
+        // NSWindows. Settings { ... } scenes don't open reliably from a
+        // background (LSUIElement) app, so we don't use them.
+        Settings { EmptyView() }
     }
 }

@@ -14,11 +14,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
         NSApp.applicationIconImage = CrabIcon.dockImage()
+        applyAppearancePreference()
         setupStatusItem()
         setupPopover()
         wireAutoDismiss()
         wireInject()
         wireGlobalHotKey()
+        // Look-and-feel observer: re-apply menu bar icon + appearance when
+        // any preference changes (it's a single notification stream).
+        NotificationCenter.default.addObserver(
+            forName: .preferencesChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyAppearancePreference()
+            self?.refreshStatusItemIcon()
+        }
         // Request notification permission up front so the "Screenshot ready"
         // banner can actually appear later without an inline auth race.
         UNUserNotificationCenter.current().requestAuthorization(
@@ -42,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         guard let button = statusItem.button else { return }
-        button.image = CrabIcon.menuBarImage()
+        button.image = CrabIcon.menuBarImage(style: currentIconStyle)
         button.image?.accessibilityDescription = "clawpypaste"
         button.target = self
         button.action = #selector(handleStatusItemClick(_:))
@@ -98,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func notifyDrop(action: String) {
+        guard Preferences.shared.showNotifications else { return }
         let content = UNMutableNotificationContent()
         content.title = "Sending to Claude"
         content.body = "\(action) on clipboard; pasting into your terminal."
@@ -169,8 +181,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ]
 
     private func findTerminalApp() -> NSRunningApplication? {
+        // Honor an explicit user preference if it's actually running.
+        let preferred = Preferences.shared.preferredTerminalBundleID
+        if !preferred.isEmpty,
+           let app = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == preferred })
+        {
+            return app
+        }
         // If the frontmost app is itself a terminal (rare during a drag,
-        // common for the inject + popover paths), honor that first.
+        // common for the inject + popover paths), honor that.
         if let front = NSWorkspace.shared.frontmostApplication,
            let id = front.bundleIdentifier,
            Self.preferredTerminalBundleIDs.contains(id)
@@ -215,6 +234,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Look & feel
+
+    private var currentIconStyle: Preferences.IconStyle {
+        Preferences.IconStyle(rawValue: Preferences.shared.menuBarIconStyle) ?? .silhouette
+    }
+
+    private func refreshStatusItemIcon() {
+        guard let button = statusItem?.button else { return }
+        let img = CrabIcon.menuBarImage(style: currentIconStyle)
+        img.accessibilityDescription = "clawpypaste"
+        button.image = img
+    }
+
+    private func applyAppearancePreference() {
+        let raw = Preferences.shared.appearance
+        let style = Preferences.AppearanceStyle(rawValue: raw) ?? .system
+        switch style {
+        case .system: NSApp.appearance = nil
+        case .light:  NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark:   NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+    }
+
     private func showContextMenu() {
         let menu = NSMenu()
         menu.addItem(withTitle: "Send window to Claude…", action: #selector(sendWindowToClaude), keyEquivalent: "s")
@@ -223,8 +265,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Open window", action: #selector(openDetachedWindow), keyEquivalent: "")
-            .target = self
-        menu.addItem(withTitle: "Rescan", action: #selector(rescan), keyEquivalent: "r")
             .target = self
         menu.addItem(.separator())
         menu.addItem(withTitle: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
@@ -255,13 +295,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupPopover() {
         let content = MenuBarContent(
             store: store,
-            onRequestOpenWindow: { [weak self] in self?.openDetachedWindow() }
+            onRequestOpenWindow: { [weak self] in self?.openDetachedWindow() },
+            onOpenPreferences: { [weak self] in self?.openPreferences() }
         )
         popover = NSPopover()
-        popover.contentSize = NSSize(width: 420, height: 520)
+        popover.contentSize = popoverSize()
         popover.behavior = .transient
         popover.animates = false
         popover.contentViewController = NSHostingController(rootView: content)
+    }
+
+    private func popoverSize() -> NSSize {
+        Preferences.shared.compactPopover
+            ? NSSize(width: 380, height: 440)
+            : NSSize(width: 420, height: 520)
     }
 
     func togglePopover() {
@@ -425,14 +472,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         screenshotCoordinator.capture(target: previousFrontmostApp, mode: .region)
     }
 
+    // MARK: - Preferences window
+
+    private var preferencesWindow: NSWindow?
+
     @objc private func openPreferences() {
+        if let w = preferencesWindow {
+            NSApplication.shared.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            w.makeKeyAndOrderFront(nil)
+            return
+        }
+        let host = NSHostingController(rootView: PreferencesView())
+        let w = NSWindow(contentViewController: host)
+        w.title = "clawpypaste — Preferences"
+        w.styleMask = [.titled, .closable, .miniaturizable]
+        w.setContentSize(NSSize(width: 520, height: 360))
+        w.center()
+        w.isReleasedWhenClosed = false
+        w.delegate = WindowDelegate.shared
+        preferencesWindow = w
         NSApplication.shared.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        if #available(macOS 14.0, *) {
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
-        }
+        w.makeKeyAndOrderFront(nil)
     }
 }
 

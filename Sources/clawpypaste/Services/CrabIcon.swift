@@ -7,9 +7,19 @@ import AppKit
 //
 // The dock icon stays full-color since dock icons aren't templated.
 enum CrabIcon {
-    static func menuBarImage() -> NSImage {
-        let color = renderEmoji("🦀", canvas: NSSize(width: 22, height: 22), fontSize: 18)
-        return monochromeSilhouette(from: color, logicalSize: NSSize(width: 22, height: 22))
+    static func menuBarImage(style: Preferences.IconStyle = .silhouette) -> NSImage {
+        switch style {
+        case .silhouette:
+            let color = renderEmoji("🦀", canvas: NSSize(width: 22, height: 22), fontSize: 18)
+            return monochromeSilhouette(from: color, logicalSize: NSSize(width: 22, height: 22))
+        case .color:
+            return renderEmoji("🦀", canvas: NSSize(width: 22, height: 22), fontSize: 17)
+        case .clipboard:
+            let img = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "clawpypaste")
+                ?? NSImage()
+            img.isTemplate = true
+            return img
+        }
     }
 
     static func dockImage() -> NSImage {

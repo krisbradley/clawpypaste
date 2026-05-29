@@ -5,6 +5,7 @@ struct MainView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject private var history = HistoryStore.shared
     let compact: Bool
+    var onOpenPreferences: (() -> Void)? = nil
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -103,11 +104,13 @@ struct MainView: View {
                 sessionMenu
             }
             Spacer()
-            Button(action: { store.rescan() }) {
-                Image(systemName: "arrow.clockwise")
+            if let onOpenPreferences = onOpenPreferences {
+                Button(action: onOpenPreferences) {
+                    Image(systemName: "gear")
+                }
+                .buttonStyle(.borderless)
+                .help("Preferences…")
             }
-            .buttonStyle(.borderless)
-            .help("Rescan active session")
 
             if !compact {
                 Button(action: { NSApp.terminate(nil) }) {

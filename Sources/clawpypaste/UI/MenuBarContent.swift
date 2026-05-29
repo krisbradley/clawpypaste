@@ -7,9 +7,10 @@ import SwiftUI
 struct MenuBarContent: View {
     @ObservedObject var store: SessionStore
     let onRequestOpenWindow: () -> Void
+    let onOpenPreferences: () -> Void
 
     var body: some View {
-        MainView(store: store, compact: true)
+        MainView(store: store, compact: true, onOpenPreferences: onOpenPreferences)
             .overlay(alignment: .bottom) {
                 Button(action: onRequestOpenWindow) {
                     Label("Open window", systemImage: "macwindow")

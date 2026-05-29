@@ -60,6 +60,11 @@ final class SessionStore: ObservableObject {
 
     init() {
         pinned = PinStore.load()
+        // Default kind filter from prefs.
+        let raw = Preferences.shared.defaultBlockFilter
+        if !raw.isEmpty, let kind = BlockKind(rawValue: raw) {
+            kindFilter = kind
+        }
         rescan()
         // Re-check which session is active every 3s — handles the case where
         // the user starts a new Claude session in a different project.
@@ -120,7 +125,9 @@ final class SessionStore: ObservableObject {
     func copy(_ block: Block, asText text: String) {
         Clipboard.copy(text)
         recentlyCopiedId = block.id
-        onCopy?()
+        if Preferences.shared.autoDismissPopover {
+            onCopy?()
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
             if self?.recentlyCopiedId == block.id { self?.recentlyCopiedId = nil }
         }

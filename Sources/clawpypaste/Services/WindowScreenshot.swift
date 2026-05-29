@@ -110,6 +110,7 @@ final class WindowScreenshotCoordinator {
     }
 
     private func notify(target: String) {
+        guard Preferences.shared.showNotifications else { return }
         let content = UNMutableNotificationContent()
         content.title = "Screenshot on clipboard"
         content.body = "Pasting into \(target) with ⌃V. If it doesn't appear, press ⌃V in your Claude prompt manually."

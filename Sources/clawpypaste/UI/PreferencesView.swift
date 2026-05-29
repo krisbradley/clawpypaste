@@ -7,9 +7,63 @@ struct PreferencesView: View {
         TabView {
             hotkeysTab
                 .tabItem { Label("Hotkeys", systemImage: "keyboard") }
+            behaviorTab
+                .tabItem { Label("Behavior", systemImage: "slider.horizontal.3") }
+            lookAndFeelTab
+                .tabItem { Label("Look & Feel", systemImage: "paintpalette") }
+            terminalTab
+                .tabItem { Label("Terminal", systemImage: "terminal") }
         }
-        .frame(width: 480, height: 320)
+        .frame(width: 640, height: 500)
     }
+
+    // MARK: - Look & feel
+
+    private var lookAndFeelTab: some View {
+        Form {
+            Section("Menu bar icon") {
+                Picker("Style", selection: $prefs.menuBarIconStyle) {
+                    Text("Crab silhouette (template)").tag(Preferences.IconStyle.silhouette.rawValue)
+                    Text("Color crab 🦀").tag(Preferences.IconStyle.color.rawValue)
+                    Text("Clipboard symbol").tag(Preferences.IconStyle.clipboard.rawValue)
+                }
+                Text("Silhouette tints automatically for dark/light menu bars. Color stays full-color in all modes.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Popover") {
+                Toggle("Compact mode", isOn: $prefs.compactPopover)
+                Text("Smaller popover footprint. Takes effect the next time you open the popover.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Detached window") {
+                Picker("Default tab", selection: $prefs.defaultBrowserMode) {
+                    Text("Blocks").tag("blocks")
+                    Text("Conversation").tag("conversation")
+                }
+                Text("Which detail pane mode the session browser opens with.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Appearance") {
+                Picker("Theme", selection: $prefs.appearance) {
+                    Text("Match system").tag(Preferences.AppearanceStyle.system.rawValue)
+                    Text("Light").tag(Preferences.AppearanceStyle.light.rawValue)
+                    Text("Dark").tag(Preferences.AppearanceStyle.dark.rawValue)
+                }
+                Text("Overrides macOS appearance for clawpypaste's windows.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Hotkeys
 
     private var hotkeysTab: some View {
         Form {
@@ -38,7 +92,6 @@ struct PreferencesView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
     }
 
     private func hotkeyRow(label: String, binding: Binding<Preferences.Hotkey?>, help: String) -> some View {
@@ -54,5 +107,52 @@ struct PreferencesView: View {
                 .frame(width: 160, height: 24)
         }
         .padding(.vertical, 4)
+    }
+
+    // MARK: - Behavior
+
+    private var behaviorTab: some View {
+        Form {
+            Section("Popover") {
+                Toggle("Auto-dismiss after copy", isOn: $prefs.autoDismissPopover)
+                Picker("Default filter on open", selection: $prefs.defaultBlockFilter) {
+                    Text("All blocks").tag(Preferences.allBlockFilterSentinel)
+                    ForEach(BlockKind.allCases, id: \.self) { kind in
+                        Text(kind.label).tag(kind.rawValue)
+                    }
+                }
+            }
+            Section("Notifications") {
+                Toggle("Show drop / screenshot banners", isOn: $prefs.showNotifications)
+                Text("Banners confirm where a dropped file or screenshot was sent. Turn off if they clutter Notification Center.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: - Terminal
+
+    private var terminalTab: some View {
+        Form {
+            Section("Paste target") {
+                Picker("Preferred terminal", selection: $prefs.preferredTerminalBundleID) {
+                    Text("Auto-detect").tag(Preferences.autoTerminalSentinel)
+                    Divider()
+                    Text("iTerm2").tag("com.googlecode.iterm2")
+                    Text("Warp").tag("dev.warp.Warp-Stable")
+                    Text("Ghostty").tag("com.mitchellh.ghostty")
+                    Text("Alacritty").tag("io.alacritty")
+                    Text("Kitty").tag("net.kovidgoyal.kitty")
+                    Text("Hyper").tag("co.zeit.hyper")
+                    Text("Terminal").tag("com.apple.Terminal")
+                }
+                Text("Where Send-to-Claude, Inject, and drop-to-icon route their pastes. Auto-detect picks the highest-priority running terminal.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }

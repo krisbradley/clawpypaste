@@ -23,10 +23,50 @@ final class Preferences: ObservableObject {
         didSet { write(regionScreenshotHotkey, for: .regionShot); didChange() }
     }
 
+    @Published var autoDismissPopover: Bool {
+        didSet { UserDefaults.standard.set(autoDismissPopover, forKey: "autoDismissPopover"); didChange() }
+    }
+    @Published var showNotifications: Bool {
+        didSet { UserDefaults.standard.set(showNotifications, forKey: "showNotifications"); didChange() }
+    }
+    @Published var defaultBlockFilter: String {
+        didSet { UserDefaults.standard.set(defaultBlockFilter, forKey: "defaultBlockFilter"); didChange() }
+    }
+    @Published var preferredTerminalBundleID: String {
+        didSet { UserDefaults.standard.set(preferredTerminalBundleID, forKey: "preferredTerminalBundleID"); didChange() }
+    }
+    @Published var menuBarIconStyle: String {
+        didSet { UserDefaults.standard.set(menuBarIconStyle, forKey: "menuBarIconStyle"); didChange() }
+    }
+    @Published var compactPopover: Bool {
+        didSet { UserDefaults.standard.set(compactPopover, forKey: "compactPopover"); didChange() }
+    }
+    @Published var defaultBrowserMode: String {
+        didSet { UserDefaults.standard.set(defaultBrowserMode, forKey: "defaultBrowserMode"); didChange() }
+    }
+    @Published var appearance: String {
+        didSet { UserDefaults.standard.set(appearance, forKey: "appearance"); didChange() }
+    }
+
     enum Key: String, CaseIterable {
         case popover     = "popoverHotkey"
         case windowShot  = "windowScreenshotHotkey"
         case regionShot  = "regionScreenshotHotkey"
+    }
+
+    static let allBlockFilterSentinel = ""    // empty string == "All"
+    static let autoTerminalSentinel    = ""    // empty string == auto-detect
+
+    enum IconStyle: String, CaseIterable {
+        case silhouette  // template black crab (default)
+        case color       // 🦀 emoji rendered with native color
+        case clipboard   // SF Symbol "doc.on.clipboard" (original)
+    }
+
+    enum AppearanceStyle: String, CaseIterable {
+        case system
+        case light
+        case dark
     }
 
     static let defaultPopover    = Hotkey(keyCode: UInt32(kVK_ANSI_V), modifiers: UInt32(controlKey | optionKey), keyName: "V")
@@ -36,12 +76,30 @@ final class Preferences: ObservableObject {
         popoverHotkey          = Self.read(.popover)    ?? Self.defaultPopover
         windowScreenshotHotkey = Self.read(.windowShot) ?? Self.defaultWindowShot
         regionScreenshotHotkey = Self.read(.regionShot)
+
+        let d = UserDefaults.standard
+        autoDismissPopover        = d.object(forKey: "autoDismissPopover") as? Bool ?? true
+        showNotifications         = d.object(forKey: "showNotifications") as? Bool ?? true
+        defaultBlockFilter        = d.string(forKey: "defaultBlockFilter") ?? Self.allBlockFilterSentinel
+        preferredTerminalBundleID = d.string(forKey: "preferredTerminalBundleID") ?? Self.autoTerminalSentinel
+        menuBarIconStyle          = d.string(forKey: "menuBarIconStyle") ?? IconStyle.silhouette.rawValue
+        compactPopover            = d.object(forKey: "compactPopover") as? Bool ?? false
+        defaultBrowserMode        = d.string(forKey: "defaultBrowserMode") ?? "blocks"
+        appearance                = d.string(forKey: "appearance") ?? AppearanceStyle.system.rawValue
     }
 
     func resetToDefaults() {
-        popoverHotkey          = Self.defaultPopover
-        windowScreenshotHotkey = Self.defaultWindowShot
-        regionScreenshotHotkey = nil
+        popoverHotkey             = Self.defaultPopover
+        windowScreenshotHotkey    = Self.defaultWindowShot
+        regionScreenshotHotkey    = nil
+        autoDismissPopover        = true
+        showNotifications         = true
+        defaultBlockFilter        = Self.allBlockFilterSentinel
+        preferredTerminalBundleID = Self.autoTerminalSentinel
+        menuBarIconStyle          = IconStyle.silhouette.rawValue
+        compactPopover            = false
+        defaultBrowserMode        = "blocks"
+        appearance                = AppearanceStyle.system.rawValue
     }
 
     // MARK: - Storage

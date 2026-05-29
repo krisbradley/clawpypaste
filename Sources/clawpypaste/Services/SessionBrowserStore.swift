@@ -23,7 +23,10 @@ final class SessionBrowserStore: ObservableObject {
     @Published var search: String = ""
     @Published var blockKindFilter: BlockKind? = nil
     @Published var blockSearch: String = ""
-    @Published var detailMode: DetailMode = .blocks
+    @Published var detailMode: DetailMode = {
+        let raw = Preferences.shared.defaultBrowserMode
+        return DetailMode(rawValue: raw) ?? .blocks
+    }()
     @Published var globalSearch: String = ""
 
     private let extractor = BlockExtractor()
