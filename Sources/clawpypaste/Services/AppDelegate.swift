@@ -227,6 +227,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Rescan", action: #selector(rescan), keyEquivalent: "r")
             .target = self
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
+            .target = self
+        menu.addItem(.separator())
         if LoginItem.isSupported {
             let title = LoginItem.isEnabled ? "Launch at login ✓" : "Launch at login"
             menu.addItem(withTitle: title, action: #selector(toggleLoginItem), keyEquivalent: "")
@@ -338,16 +341,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Global hotkey
 
     private func wireGlobalHotKey() {
-        // Ctrl+Opt+V — easy to chord, unlikely to clash.
-        hotKey = GlobalHotKey(keyCode: UInt32(kVK_ANSI_V), modifiers: controlKey | optionKey) { [weak self] in
-            DispatchQueue.main.async { self?.togglePopover() }
+        applyHotkeyPreferences()
+        NotificationCenter.default.addObserver(
+            forName: .preferencesChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.applyHotkeyPreferences()
         }
-        // Ctrl+Opt+S — send window screenshot to Claude.
-        screenshotHotKey = GlobalHotKey(keyCode: UInt32(kVK_ANSI_S), modifiers: controlKey | optionKey) { [weak self] in
-            DispatchQueue.main.async {
-                self?.captureFrontmostApp()
-                self?.sendWindowToClaude()
+    }
+
+    // Second hotkey for region screenshot.
+    private var regionScreenshotHotKey: GlobalHotKey?
+
+    private func applyHotkeyPreferences() {
+        let prefs = Preferences.shared
+
+        if let h = prefs.popoverHotkey {
+            hotKey = GlobalHotKey(keyCode: h.keyCode, modifiers: Int(h.modifiers)) { [weak self] in
+                DispatchQueue.main.async { self?.togglePopover() }
             }
+        } else {
+            hotKey = nil
+        }
+
+        if let h = prefs.windowScreenshotHotkey {
+            screenshotHotKey = GlobalHotKey(keyCode: h.keyCode, modifiers: Int(h.modifiers)) { [weak self] in
+                DispatchQueue.main.async {
+                    self?.captureFrontmostApp()
+                    self?.sendWindowToClaude()
+                }
+            }
+        } else {
+            screenshotHotKey = nil
+        }
+
+        if let h = prefs.regionScreenshotHotkey {
+            regionScreenshotHotKey = GlobalHotKey(keyCode: h.keyCode, modifiers: Int(h.modifiers)) { [weak self] in
+                DispatchQueue.main.async {
+                    self?.captureFrontmostApp()
+                    self?.sendRegionToClaude()
+                }
+            }
+        } else {
+            regionScreenshotHotKey = nil
         }
     }
 
@@ -386,6 +423,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func sendRegionToClaude() {
         screenshotCoordinator.capture(target: previousFrontmostApp, mode: .region)
+    }
+
+    @objc private func openPreferences() {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        if #available(macOS 14.0, *) {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        } else {
+            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
     }
 }
 
