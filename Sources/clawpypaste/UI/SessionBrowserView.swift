@@ -50,7 +50,16 @@ struct SessionBrowserView: View {
 
             Divider()
 
-            List(selection: $browser.selectedSessionURL) {
+            // Route List's selection through browser.select(_:) so the right
+            // pane actually reloads. The direct $browser.selectedSessionURL
+            // binding only mutates the property; it never triggers the
+            // blocks/conversation/stats reload.
+            List(selection: Binding(
+                get: { browser.selectedSessionURL },
+                set: { newValue in
+                    if let url = newValue { browser.select(url) }
+                }
+            )) {
                 ForEach(browser.groupedSessions) { group in
                     Section(group.title) {
                         ForEach(group.sessions, id: \.url) { info in
