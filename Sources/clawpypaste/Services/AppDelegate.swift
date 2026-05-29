@@ -269,6 +269,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Preferences…", action: #selector(openPreferences), keyEquivalent: ",")
             .target = self
+        menu.addItem(withTitle: "About clawpypaste", action: #selector(openAbout), keyEquivalent: "")
+            .target = self
         menu.addItem(.separator())
         if LoginItem.isSupported {
             let title = LoginItem.isEnabled ? "Launch at login ✓" : "Launch at login"
@@ -400,6 +402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Second hotkey for region screenshot.
     private var regionScreenshotHotKey: GlobalHotKey?
+    private var copyLatestHotKey: GlobalHotKey?
 
     private func applyHotkeyPreferences() {
         let prefs = Preferences.shared
@@ -432,6 +435,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } else {
             regionScreenshotHotKey = nil
+        }
+
+        if let h = prefs.copyLatestHotkey {
+            copyLatestHotKey = GlobalHotKey(keyCode: h.keyCode, modifiers: Int(h.modifiers)) { [weak self] in
+                DispatchQueue.main.async {
+                    self?.store.copyLatestMatching(kindRaw: prefs.copyLatestKind)
+                }
+            }
+        } else {
+            copyLatestHotKey = nil
         }
     }
 
@@ -475,6 +488,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Preferences window
 
     private var preferencesWindow: NSWindow?
+
+    @objc private func openAbout() {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let credits = NSAttributedString(
+            string: """
+            Menu bar block picker and session browser for Claude Code.
+
+            github.com/krisbradley/clawpypaste
+            MIT License
+            """,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11),
+                .foregroundColor: NSColor.secondaryLabelColor,
+            ]
+        )
+        NSApp.orderFrontStandardAboutPanel(options: [
+            .applicationName: "clawpypaste",
+            .applicationVersion: version,
+            .credits: credits,
+        ])
+    }
 
     @objc private func openPreferences() {
         if let w = preferencesWindow {

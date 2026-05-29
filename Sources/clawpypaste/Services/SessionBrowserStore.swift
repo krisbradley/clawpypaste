@@ -32,10 +32,39 @@ final class SessionBrowserStore: ObservableObject {
     private let extractor = BlockExtractor()
     private var loadedURL: URL? = nil
 
+    // Lazy cache for sidebar sparklines: parsed buckets per session URL,
+    // keyed by mtime so stale stats get recomputed on file change.
+    private struct SparkCacheEntry { let mtime: Date; let buckets: [Int] }
+    private var sparkCache: [URL: SparkCacheEntry] = [:]
+    @Published private(set) var sparkBuckets: [URL: [Int]] = [:]
+    private let sparkQueue = DispatchQueue(label: "clawpypaste.sparkline", qos: .utility)
+
     func refresh() {
         sessions = ActiveSession.findRecent(limit: 1000)
         if selectedSessionURL == nil, let first = sessions.first {
             select(first.url)
+        }
+        // Kick off lazy sparkline computation for any session we don't have
+        // cached or whose mtime has moved on.
+        let toCompute = sessions.filter { info in
+            sparkCache[info.url]?.mtime != info.modifiedAt
+        }
+        if !toCompute.isEmpty { computeSparklines(for: toCompute) }
+    }
+
+    private func computeSparklines(for infos: [ActiveSession.Info]) {
+        sparkQueue.async { [weak self] in
+            guard let self = self else { return }
+            for info in infos {
+                guard let records = try? SessionParser.parse(url: info.url) else { continue }
+                let stats = SessionStats.compute(records: records)
+                let buckets = stats.activityBuckets
+                let entry = SparkCacheEntry(mtime: info.modifiedAt, buckets: buckets)
+                DispatchQueue.main.async {
+                    self.sparkCache[info.url] = entry
+                    self.sparkBuckets[info.url] = buckets
+                }
+            }
         }
     }
 

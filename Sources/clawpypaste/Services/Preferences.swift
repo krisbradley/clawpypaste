@@ -47,11 +47,24 @@ final class Preferences: ObservableObject {
     @Published var appearance: String {
         didSet { UserDefaults.standard.set(appearance, forKey: "appearance"); didChange() }
     }
+    @Published var copyLatestHotkey: Hotkey? {
+        didSet { write(copyLatestHotkey, for: .copyLatest); didChange() }
+    }
+    @Published var copyLatestKind: String {
+        didSet { UserDefaults.standard.set(copyLatestKind, forKey: "copyLatestKind"); didChange() }
+    }
+    @Published var autoPinPatterns: [String] {
+        didSet {
+            UserDefaults.standard.set(autoPinPatterns, forKey: "autoPinPatterns")
+            didChange()
+        }
+    }
 
     enum Key: String, CaseIterable {
         case popover     = "popoverHotkey"
         case windowShot  = "windowScreenshotHotkey"
         case regionShot  = "regionScreenshotHotkey"
+        case copyLatest  = "copyLatestHotkey"
     }
 
     static let allBlockFilterSentinel = ""    // empty string == "All"
@@ -86,6 +99,9 @@ final class Preferences: ObservableObject {
         compactPopover            = d.object(forKey: "compactPopover") as? Bool ?? false
         defaultBrowserMode        = d.string(forKey: "defaultBrowserMode") ?? "blocks"
         appearance                = d.string(forKey: "appearance") ?? AppearanceStyle.system.rawValue
+        copyLatestHotkey          = Self.read(.copyLatest)
+        copyLatestKind            = d.string(forKey: "copyLatestKind") ?? "code"
+        autoPinPatterns           = d.stringArray(forKey: "autoPinPatterns") ?? []
     }
 
     func resetToDefaults() {
@@ -100,6 +116,9 @@ final class Preferences: ObservableObject {
         compactPopover            = false
         defaultBrowserMode        = "blocks"
         appearance                = AppearanceStyle.system.rawValue
+        copyLatestHotkey          = nil
+        copyLatestKind            = "code"
+        autoPinPatterns           = []
     }
 
     // MARK: - Storage

@@ -237,13 +237,35 @@ struct MainView: View {
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             Spacer()
-            Text(store.blocks.isEmpty ? "No blocks yet" : "No matches")
-                .foregroundStyle(.secondary)
-                .font(.system(size: 13))
-            if !store.blocks.isEmpty {
+            if store.activePath == "no Claude session found" {
+                Image(systemName: "terminal")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.tertiary)
+                Text("No Claude session yet")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13, weight: .medium))
+                Text("Run `claude` in your terminal to start one — blocks appear here as Claude responds.")
+                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            } else if store.blocks.isEmpty {
+                Text("No blocks yet")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13))
+                Text("Once Claude sends a response, code, output, and other grabbable bits will land here.")
+                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 11))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            } else {
+                Text("No matches")
+                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13))
                 Text("Adjust filters or search")
                     .foregroundStyle(.tertiary)
                     .font(.system(size: 11))

@@ -236,5 +236,45 @@ final class SessionStore: ObservableObject {
         let newBlocks = extractor.extract(records: records)
         blocks = newBlocks
         lastUpdate = Date()
+        autoPinMatchingBlocks()
+    }
+
+    // Apply user-configured auto-pin regex patterns. Any block whose content
+    // matches at least one pattern gets pinned (if not already). Idempotent —
+    // re-running on the same blocks doesn't dupe pins.
+    private func autoPinMatchingBlocks() {
+        let patterns = Preferences.shared.autoPinPatterns
+            .compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+        guard !patterns.isEmpty else { return }
+        var changed = false
+        for block in blocks where !isPinned(block) {
+            let nsContent = block.content as NSString
+            let range = NSRange(location: 0, length: nsContent.length)
+            for regex in patterns where regex.firstMatch(in: block.content, range: range) != nil {
+                pinned.append(PinnedBlock(from: block))
+                changed = true
+                break
+            }
+        }
+        if changed { PinStore.save(pinned) }
+    }
+
+    // MARK: - Copy latest (global hotkey)
+
+    // Returns the most recently extracted block of a given kind (or any kind
+    // when the filter is empty/"any"). Used by the optional copy-latest
+    // hotkey so the user can grab the freshest code block with one keystroke
+    // without opening the popover.
+    func copyLatestMatching(kindRaw: String) {
+        let candidates: [Block]
+        if kindRaw.isEmpty || kindRaw == "any" {
+            candidates = blocks
+        } else if let kind = BlockKind(rawValue: kindRaw) {
+            candidates = blocks.filter { $0.kind == kind }
+        } else {
+            candidates = blocks
+        }
+        guard let block = candidates.first else { return }
+        copy(block)
     }
 }

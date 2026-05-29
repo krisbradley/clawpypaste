@@ -84,6 +84,19 @@ struct PreferencesView: View {
                     help: "Capture a free-form region and paste it into Claude."
                 )
             }
+            Section("Quick copy") {
+                hotkeyRow(
+                    label: "Copy latest block",
+                    binding: $prefs.copyLatestHotkey,
+                    help: "Grab the most recent block from the active session straight to the clipboard, no popover."
+                )
+                Picker("…of kind", selection: $prefs.copyLatestKind) {
+                    Text("Any kind").tag("any")
+                    ForEach(BlockKind.allCases, id: \.self) { kind in
+                        Text(kind.label).tag(kind.rawValue)
+                    }
+                }
+            }
             Section {
                 HStack {
                     Spacer()
@@ -95,6 +108,10 @@ struct PreferencesView: View {
     }
 
     private func hotkeyRow(label: String, binding: Binding<Preferences.Hotkey?>, help: String) -> some View {
+        hotkeyFieldRow(label: label, binding: binding, help: help)
+    }
+
+    private func hotkeyFieldRow(label: String, binding: Binding<Preferences.Hotkey?>, help: String) -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(label)
@@ -125,6 +142,12 @@ struct PreferencesView: View {
             Section("Notifications") {
                 Toggle("Show drop / screenshot banners", isOn: $prefs.showNotifications)
                 Text("Banners confirm where a dropped file or screenshot was sent. Turn off if they clutter Notification Center.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Section("Auto-pin patterns") {
+                AutoPinEditor(patterns: $prefs.autoPinPatterns)
+                Text("Regex patterns (case-insensitive). Any block whose content matches gets auto-pinned. Example: ^kubectl  matches Bash blocks starting with kubectl.")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }

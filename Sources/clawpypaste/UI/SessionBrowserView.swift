@@ -70,7 +70,7 @@ struct SessionBrowserView: View {
                                 color: meta.swiftUIColor,
                                 cwd: meta.cwd,
                                 summary: meta.awaySummary,
-                                buckets: nil
+                                buckets: browser.sparkBuckets[info.url]
                             )
                             .tag(info.url)
                             .contextMenu {
@@ -484,17 +484,75 @@ private struct ConversationBubble: View {
             .foregroundStyle(.secondary)
 
             if !message.text.isEmpty {
-                Text(MarkdownRenderer.render(String(message.text.prefix(2000))))
-                    .font(.system(size: 12))
-                    .padding(10)
-                    .background(message.role == .user
-                                ? Color.accentColor.opacity(0.12)
-                                : Color.gray.opacity(0.10))
-                    .cornerRadius(8)
-                    .frame(maxWidth: 720, alignment: .leading)
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(segments.enumerated()), id: \.offset) { _, seg in
+                        switch seg {
+                        case .prose(let text):
+                            Text(MarkdownRenderer.render(text))
+                                .font(.system(size: 12))
+                                .textSelection(.enabled)
+                        case .code(let body, let language):
+                            VStack(alignment: .leading, spacing: 4) {
+                                if let language = language, !language.isEmpty {
+                                    Text(language)
+                                        .font(.system(size: 9, weight: .semibold))
+                                        .foregroundStyle(.tertiary)
+                                }
+                                Text(SyntaxHighlighter.highlight(body, language: language))
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .padding(8)
+                                    .background(Color.black.opacity(0.06))
+                                    .cornerRadius(4)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                }
+                .padding(10)
+                .background(message.role == .user
+                            ? Color.accentColor.opacity(0.12)
+                            : Color.gray.opacity(0.10))
+                .cornerRadius(8)
+                .frame(maxWidth: 720, alignment: .leading)
             }
         }
+    }
+
+    private enum Segment {
+        case prose(String)
+        case code(body: String, language: String?)
+    }
+
+    // Split the (truncated) message body into prose and ```fence``` code
+    // blocks so the bubble view can render code with monospace + the same
+    // SyntaxHighlighter used by the block list.
+    private var segments: [Segment] {
+        let raw = String(message.text.prefix(4000))
+        let regex = try? NSRegularExpression(pattern: "```([A-Za-z0-9_+-]*)\\n([\\s\\S]*?)```")
+        guard let regex = regex else { return [.prose(raw)] }
+        let ns = raw as NSString
+        let fullRange = NSRange(location: 0, length: ns.length)
+        var result: [Segment] = []
+        var cursor = 0
+        regex.enumerateMatches(in: raw, range: fullRange) { match, _, _ in
+            guard let m = match else { return }
+            if m.range.location > cursor {
+                let prose = ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor))
+                let trimmed = prose.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { result.append(.prose(prose)) }
+            }
+            let lang = ns.substring(with: m.range(at: 1))
+            let body = ns.substring(with: m.range(at: 2))
+            result.append(.code(body: body, language: lang.isEmpty ? nil : lang))
+            cursor = m.range.location + m.range.length
+        }
+        if cursor < ns.length {
+            let tail = ns.substring(with: NSRange(location: cursor, length: ns.length - cursor))
+            let trimmed = tail.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { result.append(.prose(tail)) }
+        }
+        return result.isEmpty ? [.prose(raw)] : result
     }
 }
 
