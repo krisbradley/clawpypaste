@@ -66,6 +66,7 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 
 - **Edit and copy…** — open the content in a TextEditor sheet; edit then copy
 - **Fill in values…** — when the block contains `{{placeholder}}` tokens, opens a labeled form to substitute values before copying
+- **Copy as rich text (Docs, Word)** — converts markdown to HTML on the pasteboard so Google Docs, Word, Pages, Notes, and Mail render styled (headings, bold/italic, lists, links, code, blockquotes, tables); terminals fall back to plain text
 - **Copy without markdown** — strips `**bold**`, `*italic*`, `` `code` ``, headings, lists, blockquotes, link syntax (great for Slack DMs)
 - **Copy as pretty JSON** — when the block parses as JSON
 - **Wrap as code fence** — wrap a non-code block as ` ```lang ` for posting elsewhere
@@ -94,14 +95,14 @@ Example: `vim "$(clawpypaste last code > /tmp/snippet && echo /tmp/snippet)"` �
 | Kind | Source | Default copy | Special copy-as |
 |---|---|---|---|
 | Code | Fenced code in assistant text, Write/Edit content for non-prose files, Bash commands | Raw text | — |
-| Markdown | ```md fences, Write/Edit to .md/.txt/README | Raw markdown | Humanized (if AI punct) |
-| Table | Pipe-delimited tables | Raw markdown | Markdown / TSV (Slack) / CSV |
+| Markdown | ```md fences, Write/Edit to .md/.txt/README | Raw markdown | Rich text (Docs/Word) / Humanized (if AI punct) |
+| Table | Pipe-delimited tables | Raw markdown | Markdown / TSV (Slack) / CSV / Rich text (Docs/Word) |
 | Tool output | Result of any tool call | Raw text | Pretty JSON (if applicable) |
 | Tool input | Other tool inputs (queries, prompts) | Raw text | — |
 | Path | File paths in prose (`/Users/...`) | Raw path | — |
 | URL | `http(s)` URLs in prose | Raw URL | — |
-| Message | Whole assistant message | Raw markdown | Humanized (if AI punct) |
-| Section | Markdown section under a heading | Raw markdown | — |
+| Message | Whole assistant message | Raw markdown | Rich text (Docs/Word) / Humanized (if AI punct) |
+| Section | Markdown section under a heading | Raw markdown | Rich text (Docs/Word) |
 
 ## How it works
 
