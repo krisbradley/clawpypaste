@@ -67,9 +67,11 @@ final class SessionStore: ObservableObject {
         }
         rescan()
         // Re-check which session is active every 3s — handles the case where
-        // the user starts a new Claude session in a different project.
+        // the user starts a new Claude session in a different project. The
+        // file watcher already handles content changes to the active file,
+        // so the tick only reparses when the active file actually rotates.
         rescanTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.rescan() }
+            Task { @MainActor in self?.checkForActiveSessionRotation() }
         }
     }
 
@@ -143,6 +145,17 @@ final class SessionStore: ObservableObject {
     }
 
     func rescan() {
+        rescanInternal(forceReparse: true)
+    }
+
+    // Called by the 3s timer. Skips the JSONL reparse when the active file
+    // hasn't changed — the file watcher already covers that case. Saves the
+    // repeated walk through SessionParser + BlockExtractor on every tick.
+    private func checkForActiveSessionRotation() {
+        rescanInternal(forceReparse: false)
+    }
+
+    private func rescanInternal(forceReparse: Bool) {
         let recent = ActiveSession.findRecent(limit: 5)
         recentSessions = recent
 
@@ -164,6 +177,7 @@ final class SessionStore: ObservableObject {
         activePath = info.url.lastPathComponent
         activeProject = friendlyProjectName(info.projectDir)
 
+        let rotated = watcher?.url != info.url
         if let w = watcher {
             w.updatePath(info.url)
         } else {
@@ -171,7 +185,9 @@ final class SessionStore: ObservableObject {
                 self?.scheduleReparse()
             }
         }
-        reparse(url: info.url)
+        if forceReparse || rotated {
+            reparse(url: info.url)
+        }
     }
 
     func switchTo(_ info: ActiveSession.Info) {
