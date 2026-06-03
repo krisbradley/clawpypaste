@@ -81,4 +81,202 @@ enum Transformer {
         if trimmed.hasPrefix("```") && trimmed.hasSuffix("```") { return text }
         return "```\(tag)\n\(text)\n```"
     }
+
+    // Convert markdown source to HTML that Google Docs, Word, Pages, Notes,
+    // and Mail render as styled text when placed on the pasteboard's HTML
+    // type. Handles fenced code, headings, lists, blockquotes, paragraphs,
+    // and inline bold/italic/code/strikethrough/links.
+    static func markdownToHTML(_ text: String) -> String {
+        let lines = text.components(separatedBy: "\n")
+        var html: [String] = []
+        var i = 0
+
+        // Open-list tracking so adjacent list items group under one <ul>/<ol>.
+        enum ListKind { case ul, ol }
+        var openList: ListKind?
+        var paragraph: [String] = []
+
+        func flushParagraph() {
+            guard !paragraph.isEmpty else { return }
+            let joined = paragraph.joined(separator: " ")
+            html.append("<p>\(renderInline(joined))</p>")
+            paragraph.removeAll()
+        }
+
+        func closeList() {
+            guard let kind = openList else { return }
+            html.append(kind == .ul ? "</ul>" : "</ol>")
+            openList = nil
+        }
+
+        while i < lines.count {
+            let line = lines[i]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Fenced code block.
+            if trimmed.hasPrefix("```") {
+                flushParagraph()
+                closeList()
+                let lang = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                var body: [String] = []
+                i += 1
+                while i < lines.count {
+                    let inner = lines[i]
+                    if inner.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                        break
+                    }
+                    body.append(escapeHTML(inner))
+                    i += 1
+                }
+                let langAttr = lang.isEmpty ? "" : " class=\"language-\(escapeAttr(lang))\""
+                html.append("<pre><code\(langAttr)>\(body.joined(separator: "\n"))</code></pre>")
+                i += 1
+                continue
+            }
+
+            // Blank line → paragraph break and close any open list.
+            if trimmed.isEmpty {
+                flushParagraph()
+                closeList()
+                i += 1
+                continue
+            }
+
+            // Headings.
+            if let (level, body) = headingMatch(trimmed) {
+                flushParagraph()
+                closeList()
+                html.append("<h\(level)>\(renderInline(body))</h\(level)>")
+                i += 1
+                continue
+            }
+
+            // Blockquote.
+            if trimmed.hasPrefix("> ") || trimmed == ">" {
+                flushParagraph()
+                closeList()
+                var body: [String] = []
+                while i < lines.count {
+                    let t = lines[i].trimmingCharacters(in: .whitespaces)
+                    if t.hasPrefix("> ") {
+                        body.append(String(t.dropFirst(2)))
+                    } else if t == ">" {
+                        body.append("")
+                    } else {
+                        break
+                    }
+                    i += 1
+                }
+                html.append("<blockquote><p>\(renderInline(body.joined(separator: " ")))</p></blockquote>")
+                continue
+            }
+
+            // Unordered list.
+            if let item = unorderedItem(line) {
+                flushParagraph()
+                if openList != .ul {
+                    closeList()
+                    html.append("<ul>")
+                    openList = .ul
+                }
+                html.append("<li>\(renderInline(item))</li>")
+                i += 1
+                continue
+            }
+
+            // Ordered list.
+            if let item = orderedItem(line) {
+                flushParagraph()
+                if openList != .ol {
+                    closeList()
+                    html.append("<ol>")
+                    openList = .ol
+                }
+                html.append("<li>\(renderInline(item))</li>")
+                i += 1
+                continue
+            }
+
+            // Plain paragraph line.
+            closeList()
+            paragraph.append(line)
+            i += 1
+        }
+
+        flushParagraph()
+        closeList()
+
+        return html.joined(separator: "\n")
+    }
+
+    // MARK: - markdownToHTML helpers
+
+    private static func headingMatch(_ trimmed: String) -> (Int, String)? {
+        guard trimmed.hasPrefix("#") else { return nil }
+        let hashes = trimmed.prefix(while: { $0 == "#" }).count
+        guard hashes >= 1, hashes <= 6 else { return nil }
+        let after = trimmed.dropFirst(hashes)
+        guard after.first == " " else { return nil }
+        return (hashes, String(after).trimmingCharacters(in: .whitespaces))
+    }
+
+    private static func unorderedItem(_ line: String) -> String? {
+        let trimmed = line.drop(while: { $0 == " " })
+        for marker in ["- ", "* ", "+ "] {
+            if trimmed.hasPrefix(marker) {
+                return String(trimmed.dropFirst(marker.count))
+            }
+        }
+        return nil
+    }
+
+    private static let orderedRegex = try! NSRegularExpression(pattern: #"^ *\d+\.\s+(.*)$"#)
+
+    private static func orderedItem(_ line: String) -> String? {
+        let ns = line as NSString
+        let range = NSRange(location: 0, length: ns.length)
+        guard let m = orderedRegex.firstMatch(in: line, range: range) else { return nil }
+        return ns.substring(with: m.range(at: 1))
+    }
+
+    // Inline rendering — escape first, then apply markdown→tag replacements on
+    // already-escaped text so user-supplied < and > never become tags.
+    private static func renderInline(_ text: String) -> String {
+        var s = escapeHTML(text)
+
+        // Inline code first so its contents don't get re-processed by bold/italic.
+        s = s.replacingOccurrences(of: "`([^`]+)`", with: "<code>$1</code>", options: .regularExpression)
+
+        // Links: [text](url) → <a href="url">text</a>
+        s = s.replacingOccurrences(
+            of: "\\[([^\\]]+)\\]\\(([^)\\s]+)\\)",
+            with: "<a href=\"$2\">$1</a>",
+            options: .regularExpression
+        )
+
+        // Bold (before italic so we don't eat the ** markers).
+        s = s.replacingOccurrences(of: "\\*\\*([^*]+)\\*\\*", with: "<strong>$1</strong>", options: .regularExpression)
+        s = s.replacingOccurrences(of: "__([^_]+)__", with: "<strong>$1</strong>", options: .regularExpression)
+
+        // Italic.
+        s = s.replacingOccurrences(of: "(?<![*_])\\*([^*\\n]+)\\*(?![*_])", with: "<em>$1</em>", options: .regularExpression)
+        s = s.replacingOccurrences(of: "(?<![*_\\w])_([^_\\n]+)_(?![*_\\w])", with: "<em>$1</em>", options: .regularExpression)
+
+        // Strikethrough.
+        s = s.replacingOccurrences(of: "~~([^~]+)~~", with: "<del>$1</del>", options: .regularExpression)
+
+        return s
+    }
+
+    private static func escapeHTML(_ text: String) -> String {
+        var s = text
+        s = s.replacingOccurrences(of: "&", with: "&amp;")
+        s = s.replacingOccurrences(of: "<", with: "&lt;")
+        s = s.replacingOccurrences(of: ">", with: "&gt;")
+        return s
+    }
+
+    private static func escapeAttr(_ text: String) -> String {
+        escapeHTML(text).replacingOccurrences(of: "\"", with: "&quot;")
+    }
 }

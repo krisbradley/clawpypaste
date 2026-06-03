@@ -124,6 +124,15 @@ final class SessionStore: ObservableObject {
 
     func copy(_ block: Block, asText text: String) {
         Clipboard.copy(text)
+        markCopied(block)
+    }
+
+    func copy(_ block: Block, html: String, plain: String) {
+        Clipboard.copyRich(html: html, plain: plain)
+        markCopied(block)
+    }
+
+    private func markCopied(_ block: Block) {
         recentlyCopiedId = block.id
         if Preferences.shared.autoDismissPopover {
             onCopy?()

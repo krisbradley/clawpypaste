@@ -268,6 +268,7 @@ struct SessionBrowserView: View {
                                 isSelected: false,
                                 onCopy: { store.copy(block) },
                                 onCopyAs: { text in store.copy(block, asText: text) },
+                                onCopyRich: { html, plain in store.copy(block, html: html, plain: plain) },
                                 onTogglePin: { store.togglePin(block) },
                                 onInject: { store.inject(block) }
                             )
@@ -345,6 +346,7 @@ struct SessionBrowserView: View {
                                 isSelected: false,
                                 onCopy: { store.copy(block) },
                                 onCopyAs: { text in store.copy(block, asText: text) },
+                                onCopyRich: { html, plain in store.copy(block, html: html, plain: plain) },
                                 onTogglePin: { store.togglePin(block) },
                                 onInject: { store.inject(block) }
                             )

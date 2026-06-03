@@ -27,6 +27,26 @@ struct ParsedTable {
         return out.joined(separator: "\n")
     }
 
+    func toHTML() -> String {
+        func esc(_ s: String) -> String {
+            s.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+        }
+        var out = "<table><thead><tr>"
+        for h in header { out += "<th>\(esc(h))</th>" }
+        out += "</tr></thead><tbody>"
+        for row in rows {
+            var padded = row
+            while padded.count < header.count { padded.append("") }
+            out += "<tr>"
+            for cell in padded.prefix(header.count) { out += "<td>\(esc(cell))</td>" }
+            out += "</tr>"
+        }
+        out += "</tbody></table>"
+        return out
+    }
+
     func toTSV() -> String {
         var out: [String] = []
         out.append(header.map(tabSafe).joined(separator: "\t"))

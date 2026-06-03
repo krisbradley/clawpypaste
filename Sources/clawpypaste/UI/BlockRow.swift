@@ -8,6 +8,7 @@ struct BlockRow: View {
     let isSelected: Bool
     let onCopy: () -> Void
     let onCopyAs: (String) -> Void
+    let onCopyRich: (String, String) -> Void
     let onTogglePin: () -> Void
     let onInject: () -> Void
 
@@ -211,7 +212,19 @@ struct BlockRow: View {
             Button("Copy as Markdown") { onCopyAs(parsed.toMarkdown()) }
             Button("Copy as TSV (Slack)") { onCopyAs(parsed.toTSV()) }
             Button("Copy as CSV") { onCopyAs(parsed.toCSV()) }
+            Button("Copy as rich text (Docs, Word)") {
+                onCopyRich(parsed.toHTML(), parsed.toTSV())
+            }
             Divider()
+        }
+
+        if mayBenefitFromRichCopy {
+            Button("Copy as rich text (Docs, Word)") {
+                onCopyRich(
+                    Transformer.markdownToHTML(block.content),
+                    Transformer.stripMarkdown(block.content)
+                )
+            }
         }
 
         if block.isProseLike, Humanizer.looksAIGenerated(block.content) {
@@ -242,6 +255,14 @@ struct BlockRow: View {
         let c = block.content
         return c.contains("**") || c.contains("__") || c.contains("`") || c.contains("[")
             || c.range(of: "^#{1,6} ", options: [.regularExpression, .anchored]) != nil
+    }
+
+    // Same gate as strip-markdown: only show "Copy as rich text" when the
+    // source actually contains markdown markers that would translate to
+    // styling. Plain prose with no markup has nothing to render and would
+    // just confuse the menu.
+    private var mayBenefitFromRichCopy: Bool {
+        mayBenefitFromStripMarkdown
     }
 
     // MARK: - Preview body

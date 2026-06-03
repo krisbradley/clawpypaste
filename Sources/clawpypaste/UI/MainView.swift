@@ -50,6 +50,7 @@ struct MainView: View {
                                 isSelected: store.selectedBlockId == block.id,
                                 onCopy: { store.copy(block) },
                                 onCopyAs: { text in store.copy(block, asText: text) },
+                                onCopyRich: { html, plain in store.copy(block, html: html, plain: plain) },
                                 onTogglePin: { store.togglePin(block) },
                                 onInject: { store.inject(block) }
                             )
