@@ -206,6 +206,17 @@ struct BlockRow: View {
 
         Button("Edit and copy…") { showingEditSheet = true }
 
+        if isBangCommand {
+            Button("Copy command (without !)") {
+                onCopyAs(Transformer.stripBang(block.content))
+            }
+        }
+        if isRunnableInTerminal {
+            Button("Run in new Terminal") {
+                Terminal.runInNewWindow(terminalCommand)
+            }
+        }
+
         Divider()
 
         if block.kind == .table, let parsed = TableParser.parse(block.content) {
@@ -255,6 +266,25 @@ struct BlockRow: View {
         let c = block.content
         return c.contains("**") || c.contains("__") || c.contains("`") || c.contains("[")
             || c.range(of: "^#{1,6} ", options: [.regularExpression, .anchored]) != nil
+    }
+
+    // True for Claude Code's "!command" shebang convention — a single line
+    // starting with "!" (e.g. "!ls -la"). Drives the "Copy without !" item.
+    private var isBangCommand: Bool {
+        Transformer.looksLikeBangCommand(block.content)
+    }
+
+    // True when the block can sensibly be executed in a Terminal window:
+    // either it's a bash/sh/zsh code block, or it's a "!command" shebang.
+    private var isRunnableInTerminal: Bool {
+        if Transformer.looksLikeShellLanguage(block.language) { return true }
+        return isBangCommand
+    }
+
+    // The actual command string to feed into Terminal — strip the leading
+    // "!" for shebang blocks; pass everything else through verbatim.
+    private var terminalCommand: String {
+        isBangCommand ? Transformer.stripBang(block.content) : block.content
     }
 
     // Same gate as strip-markdown: only show "Copy as rich text" when the

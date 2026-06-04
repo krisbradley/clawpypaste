@@ -73,6 +73,33 @@ enum Transformer {
         return (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil
     }
 
+    // Detect Claude Code's "!command" shebang convention: a single line that
+    // starts with "!" followed by a letter, slash, dot, or underscore. This
+    // catches user-typed bash prompts like "!ls -la" while skipping noise
+    // such as "!=", "!!", "! " or "!important".
+    static func looksLikeBangCommand(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("!"), trimmed.count > 1 else { return false }
+        if trimmed.contains("\n") { return false }
+        let second = trimmed[trimmed.index(after: trimmed.startIndex)]
+        return second.isLetter || second == "/" || second == "." || second == "_"
+    }
+
+    // Strip the leading "!" (and any whitespace right after it) so the
+    // command is ready to paste or execute.
+    static func stripBang(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("!") else { return text }
+        return String(trimmed.dropFirst()).trimmingCharacters(in: .whitespaces)
+    }
+
+    // True for code blocks whose language identifies them as shell scripts,
+    // so the "Run in new Terminal" action knows to offer itself.
+    static func looksLikeShellLanguage(_ language: String?) -> Bool {
+        guard let lang = language?.lowercased(), !lang.isEmpty else { return false }
+        return ["bash", "sh", "shell", "zsh", "console", "terminal", "shellscript"].contains(lang)
+    }
+
     // Wrap the text as a fenced code block with the given language.
     static func wrapInFence(_ text: String, language: String? = nil) -> String {
         let tag = language?.trimmingCharacters(in: .whitespaces) ?? ""

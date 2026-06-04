@@ -71,6 +71,8 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 - **Copy as pretty JSON** — when the block parses as JSON
 - **Wrap as code fence** — wrap a non-code block as ` ```lang ` for posting elsewhere
 - **Copy as Markdown / TSV (Slack) / CSV** — on detected markdown tables
+- **Copy command (without !)** — on Claude Code `!command` shebang lines, drops the leading `!` so the bare command lands on the clipboard
+- **Run in new Terminal** — on bash/sh/zsh code blocks and `!command` shebang lines, opens a fresh Terminal.app window and runs the command there
 - **Copy humanized** — on prose blocks with AI-typical punctuation or phrases (strips em-dashes, smart quotes, "Certainly!", "I hope this helps!", etc.)
 - **Inject into Claude prompt** — pastes the block into whatever app was focused before the popover opened (requires Accessibility permission on first use)
 - **Pin / Unpin**

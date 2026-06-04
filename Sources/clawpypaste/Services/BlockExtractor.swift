@@ -77,8 +77,23 @@ struct BlockExtractor {
     private func ingestUser(record: SessionRecord, turnIndex: Int, into byId: inout [String: Block]) {
         guard let content = record.message?.content else { return }
         switch content {
-        case .text:
-            break  // raw user prompts aren't useful to copy back into Claude
+        case .text(let text):
+            // Raw prose prompts aren't useful to copy back into Claude, but
+            // Claude Code's "!command" shebang lines are — surface them as
+            // bash code blocks so the picker can offer "Run in new Terminal".
+            if Transformer.looksLikeBangCommand(text) {
+                insert(
+                    .make(
+                        kind: .code,
+                        content: text.trimmingCharacters(in: .whitespacesAndNewlines),
+                        language: "bash",
+                        title: "User !command",
+                        turnIndex: turnIndex,
+                        timestamp: record.timestamp
+                    ),
+                    into: &byId
+                )
+            }
         case .parts(let parts):
             for part in parts where part.type == "tool_result" {
                 let text = part.content?.asString ?? ""
