@@ -54,6 +54,7 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 | Open the popover | Click the 🦀 in the menu bar, or press **⌃⌥V** |
 | Move selection | **↑ / ↓** (Shift+arrow jumps by 10) |
 | Copy selected block | **Return** (popover auto-dismisses) |
+| Copy the Nth visible block | **⌘1–⌘9** |
 | Focus search field | **/** |
 | Drag a block to another app | Click-and-hold, then drag |
 | Pin / unpin | Click the star, or right-click → Pin |
@@ -72,7 +73,10 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 - **Wrap as code fence** — wrap a non-code block as ` ```lang ` for posting elsewhere
 - **Copy as Markdown / TSV (Slack) / CSV** — on detected markdown tables
 - **Copy command (without !)** — on Claude Code `!command` shebang lines, drops the leading `!` so the bare command lands on the clipboard
-- **Run in new Terminal** — on bash/sh/zsh code blocks and `!command` shebang lines, opens a fresh Terminal.app window and runs the command there
+- **Run in new Terminal** — on bash/sh/zsh code blocks and `!command` shebang lines, opens a fresh Terminal.app or iTerm2 window (pick in Preferences → Terminal) and runs the command there; destructive-looking commands (`rm -rf`, `sudo`, `git push --force`, pipe-to-shell, …) ask for confirmation first
+- **Copy diff result (applied code)** — on ` ```diff ` blocks / unified diffs, drops removed lines and diff metadata and strips the `+`/context markers so you get the final code
+- **Copy without quote marks (>)** — on blockquote-style content, strips the leading `>` markers (nested quotes too)
+- **Reveal in Finder / Open in editor** — on any block whose content is an existing file path (trailing `:line:col` suffixes are handled)
 - **Copy humanized** — on prose blocks with AI-typical punctuation or phrases (strips em-dashes, smart quotes, "Certainly!", "I hope this helps!", etc.)
 - **Inject into Claude prompt** — pastes the block into whatever app was focused before the popover opened (requires Accessibility permission on first use)
 - **Pin / Unpin**

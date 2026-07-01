@@ -14,6 +14,7 @@ struct BlockRow: View {
 
     @State private var showingEditSheet = false
     @State private var showingSnippetSheet = false
+    @State private var showingRunConfirm = false
 
     private var maxPreviewLines: Int {
         switch block.kind {
@@ -106,6 +107,12 @@ struct BlockRow: View {
                 onCopy: { text in onCopyAs(text) }
             )
         }
+        .alert("Run this command?", isPresented: $showingRunConfirm) {
+            Button("Run", role: .destructive) { Terminal.runInNewWindow(terminalCommand) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This looks destructive:\n\n\(String(terminalCommand.prefix(300)))")
+        }
     }
 
     // Small "from session …" chip with a colored dot, shown in history
@@ -162,20 +169,40 @@ struct BlockRow: View {
         }
     }
 
-    private func openPath(_ raw: String) {
+    // Strip ":line" or ":line:col" suffixes Claude often appends, and
+    // expand a leading tilde, yielding a plain filesystem path.
+    private func cleanedPath(_ raw: String) -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Strip ":line" or ":line:col" suffixes Claude often appends.
         let cleaned = trimmed.replacingOccurrences(
             of: ":\\d+(:\\d+)?$",
             with: "",
             options: .regularExpression
         )
-        let expanded = (cleaned as NSString).expandingTildeInPath
+        return (cleaned as NSString).expandingTildeInPath
+    }
+
+    private func openPath(_ raw: String) {
+        let expanded = cleanedPath(raw)
         if FileManager.default.fileExists(atPath: expanded) {
             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: expanded)])
         } else {
             onCopy()
         }
+    }
+
+    private func openInEditor(_ path: String) {
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+    }
+
+    // If the whole block is a single token that resolves to an existing
+    // file or directory (e.g. a path inside a tool result), return the
+    // expanded path so the menu can offer Finder / editor actions.
+    private var resolvedExistingPath: String? {
+        let trimmed = block.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.contains("\n"), !trimmed.contains(" ") else { return nil }
+        guard trimmed.hasPrefix("/") || trimmed.hasPrefix("~") else { return nil }
+        let expanded = cleanedPath(trimmed)
+        return FileManager.default.fileExists(atPath: expanded) ? expanded : nil
     }
 
     private func openURL(_ raw: String) {
@@ -190,7 +217,15 @@ struct BlockRow: View {
     private var contextMenu: some View {
         if block.kind == .path {
             Button("Open in Finder") { openPath(block.content) }
+            Button("Open in editor") { openInEditor(cleanedPath(block.content)) }
             Button("Copy path") { onCopy() }
+            Divider()
+        } else if let path = resolvedExistingPath {
+            Button("Reveal in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            }
+            Button("Open in editor") { openInEditor(path) }
+            Button("Copy") { onCopy() }
             Divider()
         } else if block.kind == .url {
             Button("Open in browser") { openURL(block.content) }
@@ -212,8 +247,12 @@ struct BlockRow: View {
             }
         }
         if isRunnableInTerminal {
-            Button("Run in new Terminal") {
-                Terminal.runInNewWindow(terminalCommand)
+            Button("Run in new \(runTerminalName)") {
+                if Terminal.isDangerous(terminalCommand) {
+                    showingRunConfirm = true
+                } else {
+                    Terminal.runInNewWindow(terminalCommand)
+                }
             }
         }
 
@@ -243,6 +282,16 @@ struct BlockRow: View {
         }
 
         // Generic transforms — gated by applicability.
+        if Transformer.looksLikeDiff(block.content, language: block.language) {
+            Button("Copy diff result (applied code)") {
+                onCopyAs(Transformer.stripDiffMarkers(block.content))
+            }
+        }
+        if Transformer.looksLikeQuoted(block.content) {
+            Button("Copy without quote marks (>)") {
+                onCopyAs(Transformer.stripQuoteMarkers(block.content))
+            }
+        }
         if mayBenefitFromStripMarkdown {
             Button("Copy without markdown") { onCopyAs(Transformer.stripMarkdown(block.content)) }
         }
@@ -285,6 +334,12 @@ struct BlockRow: View {
     // "!" for shebang blocks; pass everything else through verbatim.
     private var terminalCommand: String {
         isBangCommand ? Transformer.stripBang(block.content) : block.content
+    }
+
+    // Display name of the terminal app the run action targets, so the menu
+    // item reads "Run in new iTerm2" when that's the configured target.
+    private var runTerminalName: String {
+        (Terminal.RunApp(rawValue: Preferences.shared.runCommandTerminal) ?? .terminal).displayName
     }
 
     // Same gate as strip-markdown: only show "Copy as rich text" when the

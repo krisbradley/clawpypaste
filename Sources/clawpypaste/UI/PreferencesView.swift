@@ -175,6 +175,16 @@ struct PreferencesView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+            Section("Run in new Terminal") {
+                Picker("Run commands in", selection: $prefs.runCommandTerminal) {
+                    ForEach(Terminal.RunApp.allCases, id: \.rawValue) { app in
+                        Text(app.displayName).tag(app.rawValue)
+                    }
+                }
+                Text("Which app the \"Run in new Terminal\" right-click action opens. Only apps that can script a new window are listed.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
     }

@@ -90,6 +90,15 @@ struct MainView: View {
             }
             Button("") { searchFocused = true }
                 .keyboardShortcut("/", modifiers: [])
+            // ⌘1–⌘9 copy the Nth visible block without touching the mouse.
+            ForEach(1...9, id: \.self) { n in
+                Button("") {
+                    let blocks = store.filteredBlocks
+                    guard n <= blocks.count else { return }
+                    store.copy(blocks[n - 1])
+                }
+                .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: [.command])
+            }
         }
         .opacity(0)
         .frame(width: 0, height: 0)

@@ -35,6 +35,9 @@ final class Preferences: ObservableObject {
     @Published var preferredTerminalBundleID: String {
         didSet { UserDefaults.standard.set(preferredTerminalBundleID, forKey: "preferredTerminalBundleID"); didChange() }
     }
+    @Published var runCommandTerminal: String {
+        didSet { UserDefaults.standard.set(runCommandTerminal, forKey: "runCommandTerminal"); didChange() }
+    }
     @Published var menuBarIconStyle: String {
         didSet { UserDefaults.standard.set(menuBarIconStyle, forKey: "menuBarIconStyle"); didChange() }
     }
@@ -95,6 +98,7 @@ final class Preferences: ObservableObject {
         showNotifications         = d.object(forKey: "showNotifications") as? Bool ?? true
         defaultBlockFilter        = d.string(forKey: "defaultBlockFilter") ?? Self.allBlockFilterSentinel
         preferredTerminalBundleID = d.string(forKey: "preferredTerminalBundleID") ?? Self.autoTerminalSentinel
+        runCommandTerminal        = d.string(forKey: "runCommandTerminal") ?? "com.apple.Terminal"
         menuBarIconStyle          = d.string(forKey: "menuBarIconStyle") ?? IconStyle.silhouette.rawValue
         compactPopover            = d.object(forKey: "compactPopover") as? Bool ?? false
         defaultBrowserMode        = d.string(forKey: "defaultBrowserMode") ?? "blocks"
@@ -112,6 +116,7 @@ final class Preferences: ObservableObject {
         showNotifications         = true
         defaultBlockFilter        = Self.allBlockFilterSentinel
         preferredTerminalBundleID = Self.autoTerminalSentinel
+        runCommandTerminal        = "com.apple.Terminal"
         menuBarIconStyle          = IconStyle.silhouette.rawValue
         compactPopover            = false
         defaultBrowserMode        = "blocks"

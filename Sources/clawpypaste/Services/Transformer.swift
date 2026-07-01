@@ -100,6 +100,57 @@ enum Transformer {
         return ["bash", "sh", "shell", "zsh", "console", "terminal", "shellscript"].contains(lang)
     }
 
+    // Detect unified-diff content: a ```diff / ```patch fence, a hunk header
+    // like "@@ -12,4 +12,6 @@", or a "diff --git" file header.
+    static func looksLikeDiff(_ text: String, language: String?) -> Bool {
+        if let lang = language?.lowercased(), ["diff", "patch", "udiff"].contains(lang) {
+            return true
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("diff --git") { return true }
+        return trimmed.range(of: #"(?m)^@@ -\d+(,\d+)? \+\d+(,\d+)? @@"#, options: .regularExpression) != nil
+    }
+
+    // Reduce a unified diff to the resulting code: drop removed lines and
+    // diff metadata (file headers, hunk headers), strip the leading "+" or
+    // context space from the lines that remain.
+    static func stripDiffMarkers(_ text: String) -> String {
+        let metadataPrefixes = ["diff --git", "index ", "+++ ", "--- ", "@@ ", "new file mode", "deleted file mode", "similarity index", "rename from", "rename to", "\\ No newline"]
+        let kept = text.components(separatedBy: "\n").compactMap { line -> String? in
+            if metadataPrefixes.contains(where: { line.hasPrefix($0) }) { return nil }
+            if line.hasPrefix("-") { return nil }
+            if line.hasPrefix("+") { return String(line.dropFirst()) }
+            if line.hasPrefix(" ") { return String(line.dropFirst()) }
+            return line
+        }
+        return kept.joined(separator: "\n")
+    }
+
+    // Detect blockquote-style content: at least one line, and every
+    // non-empty line starts with ">". Gates the "Copy without quote marks"
+    // menu item.
+    static func looksLikeQuoted(_ text: String) -> Bool {
+        let lines = text.components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return false }
+        return lines.allSatisfy { $0.hasPrefix(">") }
+    }
+
+    // Strip leading "> " / ">" quote markers from every line, handling
+    // nested quotes (">> x") by removing all leading markers.
+    static func stripQuoteMarkers(_ text: String) -> String {
+        let stripped = text.components(separatedBy: "\n").map { line -> String in
+            var s = Substring(line.trimmingCharacters(in: .whitespaces))
+            while s.hasPrefix(">") {
+                s = s.dropFirst()
+                if s.hasPrefix(" ") { s = s.dropFirst() }
+            }
+            return String(s)
+        }
+        return stripped.joined(separator: "\n")
+    }
+
     // Wrap the text as a fenced code block with the given language.
     static func wrapInFence(_ text: String, language: String? = nil) -> String {
         let tag = language?.trimmingCharacters(in: .whitespaces) ?? ""
