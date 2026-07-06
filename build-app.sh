@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 APP_NAME="clawpypaste"
 APP_BUNDLE="${APP_NAME}.app"
 BUNDLE_ID="com.kristopherbradley.${APP_NAME}"
-VERSION="0.4.6"
+VERSION="0.4.7"
 SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
 
 MODE="developer-id"
@@ -18,15 +18,18 @@ if [ "${1:-}" = "--adhoc" ]; then
     MODE="adhoc"
 fi
 
-echo "Building release binary..."
-swift build -c release
+echo "Building universal release binary (arm64 + x86_64)..."
+swift build -c release --arch arm64 --arch x86_64
+# Multi-arch builds land in .build/apple/Products/Release, not .build/release.
+BINARY=".build/apple/Products/Release/${APP_NAME}"
 
 echo "Assembling ${APP_BUNDLE}..."
 rm -rf "${APP_BUNDLE}"
 mkdir -p "${APP_BUNDLE}/Contents/MacOS"
 mkdir -p "${APP_BUNDLE}/Contents/Resources"
 
-cp ".build/release/${APP_NAME}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
+cp "${BINARY}" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
+lipo -info "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}" | sed 's/^/   /'
 
 # Generate AppIcon.icns from the 🦀 emoji at all required sizes.
 echo "Generating app icon..."

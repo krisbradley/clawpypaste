@@ -10,7 +10,7 @@ Reads the session JSONL Claude Code already writes to disk. No accessibility pro
 
 ## Install
 
-macOS 13 (Ventura) or newer. Notarized & signed with Developer ID — no Gatekeeper warnings.
+macOS 13 (Ventura) or newer, Apple Silicon or Intel (universal binary). Notarized & signed with Developer ID — no Gatekeeper warnings.
 
 ### Homebrew (recommended)
 
