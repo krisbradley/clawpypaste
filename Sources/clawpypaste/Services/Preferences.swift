@@ -56,6 +56,9 @@ final class Preferences: ObservableObject {
     @Published var copyLatestKind: String {
         didSet { UserDefaults.standard.set(copyLatestKind, forKey: "copyLatestKind"); didChange() }
     }
+    @Published var recentSessionsLimit: Int {
+        didSet { UserDefaults.standard.set(recentSessionsLimit, forKey: "recentSessionsLimit"); didChange() }
+    }
     @Published var autoPinPatterns: [String] {
         didSet {
             UserDefaults.standard.set(autoPinPatterns, forKey: "autoPinPatterns")
@@ -105,6 +108,7 @@ final class Preferences: ObservableObject {
         appearance                = d.string(forKey: "appearance") ?? AppearanceStyle.system.rawValue
         copyLatestHotkey          = Self.read(.copyLatest)
         copyLatestKind            = d.string(forKey: "copyLatestKind") ?? "code"
+        recentSessionsLimit       = d.object(forKey: "recentSessionsLimit") as? Int ?? 10
         autoPinPatterns           = d.stringArray(forKey: "autoPinPatterns") ?? []
     }
 
@@ -123,6 +127,7 @@ final class Preferences: ObservableObject {
         appearance                = AppearanceStyle.system.rawValue
         copyLatestHotkey          = nil
         copyLatestKind            = "code"
+        recentSessionsLimit       = 10
         autoPinPatterns           = []
     }
 

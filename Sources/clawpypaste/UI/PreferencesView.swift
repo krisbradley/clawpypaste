@@ -139,6 +139,20 @@ struct PreferencesView: View {
                     }
                 }
             }
+            Section("Session picker") {
+                Stepper(value: $prefs.recentSessionsLimit, in: 3...30) {
+                    HStack {
+                        Text("Recent sessions shown")
+                        Spacer()
+                        Text("\(prefs.recentSessionsLimit)")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+                Text("How many recent sessions the header menu lists. Older sessions are always available under All sessions (history).")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
             Section("Notifications") {
                 Toggle("Show drop / screenshot banners", isOn: $prefs.showNotifications)
                 Text("Banners confirm where a dropped file or screenshot was sent. Turn off if they clutter Notification Center.")

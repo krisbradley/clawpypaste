@@ -156,7 +156,7 @@ final class SessionStore: ObservableObject {
     }
 
     private func rescanInternal(forceReparse: Bool) {
-        let recent = ActiveSession.findRecent(limit: 5)
+        let recent = ActiveSession.findRecent(limit: Preferences.shared.recentSessionsLimit)
         recentSessions = recent
 
         // If the user has pinned a specific session, honor it; otherwise auto.
