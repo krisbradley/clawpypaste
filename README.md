@@ -71,7 +71,7 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 - **Copy without markdown** — strips `**bold**`, `*italic*`, `` `code` ``, headings, lists, blockquotes, link syntax (great for Slack DMs)
 - **Copy as pretty JSON** — when the block parses as JSON
 - **Wrap as code fence** — wrap a non-code block as ` ```lang ` for posting elsewhere
-- **Copy as Markdown / TSV (Slack) / CSV** — on detected markdown tables
+- **Copy as Markdown / TSV (Slack, Docs) / CSV (Docs)** — on detected markdown tables; the TSV/CSV copies also carry an HTML flavor so Docs, Word, Numbers, and Notes paste a real table while Slack and terminals get the plain TSV/CSV
 - **Copy command (without !)** — on Claude Code `!command` shebang lines, drops the leading `!` so the bare command lands on the clipboard
 - **Run in new Terminal** — on bash/sh/zsh code blocks and `!command` shebang lines, opens a fresh Terminal.app or iTerm2 window (pick in Preferences → Terminal) and runs the command there; destructive-looking commands (`rm -rf`, `sudo`, `git push --force`, pipe-to-shell, …) ask for confirmation first
 - **Copy diff result (applied code)** — on ` ```diff ` blocks / unified diffs, drops removed lines and diff metadata and strips the `+`/context markers so you get the final code
@@ -109,6 +109,7 @@ Example: `vim "$(clawpypaste last code > /tmp/snippet && echo /tmp/snippet)"` �
 | URL | `http(s)` URLs in prose | Raw URL | — |
 | Message | Whole assistant message | Raw markdown | Rich text (Docs/Word) / Humanized (if AI punct) |
 | Section | Markdown section under a heading | Raw markdown | Rich text (Docs/Word) |
+| Quote | Markdown blockquotes (`>` lines) in prose | Quoted text (`>` markers stripped) | Rich text (Docs/Word) |
 
 ## How it works
 

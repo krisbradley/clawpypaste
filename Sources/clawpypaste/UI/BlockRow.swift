@@ -20,7 +20,7 @@ struct BlockRow: View {
         switch block.kind {
         case .code, .toolResult, .toolInput: return 8
         case .table: return 8
-        case .markdown, .section, .message: return 5
+        case .markdown, .section, .message, .quote: return 5
         case .path, .url: return 1
         }
     }
@@ -260,11 +260,10 @@ struct BlockRow: View {
 
         if block.kind == .table, let parsed = TableParser.parse(block.content) {
             Button("Copy as Markdown") { onCopyAs(parsed.toMarkdown()) }
-            Button("Copy as TSV (Slack)") { onCopyAs(parsed.toTSV()) }
-            Button("Copy as CSV") { onCopyAs(parsed.toCSV()) }
-            Button("Copy as rich text (Docs, Word)") {
-                onCopyRich(parsed.toHTML(), parsed.toTSV())
-            }
+            // Rich copies: Docs/Word/Notes paste a real table from the HTML
+            // flavor; Slack/terminals fall back to the TSV/CSV plain text.
+            Button("Copy as TSV (Slack, Docs)") { onCopyRich(parsed.toHTML(), parsed.toTSV()) }
+            Button("Copy as CSV (Docs)") { onCopyRich(parsed.toHTML(), parsed.toCSV()) }
             Divider()
         }
 
@@ -418,6 +417,7 @@ struct BlockRow: View {
         case .url:        return .teal
         case .message:    return .gray
         case .section:    return .pink
+        case .quote:      return .cyan
         }
     }
 }

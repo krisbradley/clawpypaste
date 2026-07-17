@@ -100,9 +100,10 @@ final class HistoryStore: ObservableObject {
         case .toolInput: return 3
         case .markdown: return 4
         case .section: return 5
-        case .message: return 6
-        case .path: return 7
-        case .url: return 8
+        case .quote: return 6
+        case .message: return 7
+        case .path: return 8
+        case .url: return 9
         }
     }
 }

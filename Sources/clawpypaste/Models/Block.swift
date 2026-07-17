@@ -10,6 +10,7 @@ enum BlockKind: String, CaseIterable, Codable {
     case url          // URL mentioned in text
     case message      // a whole assistant message
     case section      // a markdown section under a heading
+    case quote        // a markdown blockquote (lines starting with ">")
 
     var label: String {
         switch self {
@@ -22,6 +23,7 @@ enum BlockKind: String, CaseIterable, Codable {
         case .url:        return "URL"
         case .message:    return "Message"
         case .section:    return "Section"
+        case .quote:      return "Quote"
         }
     }
 }
@@ -65,7 +67,7 @@ struct Block: Identifiable, Hashable {
     }
 
     var isProseLike: Bool {
-        kind == .markdown || kind == .message || kind == .section
+        kind == .markdown || kind == .message || kind == .section || kind == .quote
     }
 
     static func make(

@@ -38,9 +38,10 @@ struct BlockExtractor {
         case .toolInput: return 3
         case .markdown: return 4
         case .section: return 5
-        case .message: return 6
-        case .path: return 7
-        case .url: return 8
+        case .quote: return 6
+        case .message: return 7
+        case .path: return 8
+        case .url: return 9
         }
     }
 
@@ -229,6 +230,18 @@ struct BlockExtractor {
             )
         }
 
+        for quote in extractQuotes(from: prose) {
+            insert(
+                .make(
+                    kind: .quote,
+                    content: quote,
+                    turnIndex: turnIndex,
+                    timestamp: timestamp
+                ),
+                into: &byId
+            )
+        }
+
         for section in extractSections(from: prose) {
             insert(
                 .make(
@@ -316,6 +329,34 @@ struct BlockExtractor {
             if !inFence { out.append(line) }
         }
         return out.joined(separator: "\n")
+    }
+
+    // MARK: - Quote extraction (markdown blockquotes)
+
+    // A quote block is a run of consecutive lines starting with ">". The
+    // ">" markers are stripped so the quoted text itself is what lands on
+    // the clipboard (and shows in the preview).
+    private func extractQuotes(from text: String) -> [String] {
+        var quotes: [String] = []
+        var run: [String] = []
+        func flush() {
+            guard !run.isEmpty else { return }
+            let stripped = Transformer.stripQuoteMarkers(run.joined(separator: "\n"))
+            // Drop empty quotes like a bare ">" divider line.
+            if !stripped.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                quotes.append(stripped)
+            }
+            run = []
+        }
+        for line in text.components(separatedBy: "\n") {
+            if line.trimmingCharacters(in: .whitespaces).hasPrefix(">") {
+                run.append(line)
+            } else {
+                flush()
+            }
+        }
+        flush()
+        return quotes
     }
 
     // MARK: - Section extraction (markdown headings only)
