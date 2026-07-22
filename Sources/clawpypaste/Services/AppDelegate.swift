@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wireAutoDismiss()
         wireInject()
         wireGlobalHotKey()
+        UpdateChecker.shared.startAutomaticChecks()
         // Look-and-feel observer: re-apply menu bar icon + appearance when
         // any preference changes (it's a single notification stream).
         NotificationCenter.default.addObserver(
@@ -259,6 +260,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showContextMenu() {
         let menu = NSMenu()
+        if let v = UpdateChecker.shared.availableVersion {
+            menu.addItem(withTitle: "Update available — v\(v)…", action: #selector(performUpdate), keyEquivalent: "")
+                .target = self
+            menu.addItem(.separator())
+        }
         menu.addItem(withTitle: "Send window to Claude…", action: #selector(sendWindowToClaude), keyEquivalent: "s")
             .target = self
         menu.addItem(withTitle: "Send region to Claude…", action: #selector(sendRegionToClaude), keyEquivalent: "r")
@@ -286,6 +292,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil  // detach so left-click reverts to popover
+    }
+
+    @objc private func performUpdate() {
+        UpdateChecker.shared.performUpdate()
     }
 
     @objc private func toggleLoginItem() {

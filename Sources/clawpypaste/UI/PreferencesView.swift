@@ -159,6 +159,12 @@ struct PreferencesView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+            Section("Updates") {
+                Toggle("Check for updates automatically", isOn: $prefs.checkForUpdates)
+                Text("Checks the GitHub releases feed every 6 hours. When a newer version exists, an update badge appears in the popover header and the menu bar right-click menu.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
             Section("Auto-pin patterns") {
                 AutoPinEditor(patterns: $prefs.autoPinPatterns)
                 Text("Regex patterns (case-insensitive). Any block whose content matches gets auto-pinned. Example: ^kubectl  matches Bash blocks starting with kubectl.")

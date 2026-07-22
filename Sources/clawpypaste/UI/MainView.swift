@@ -4,6 +4,7 @@ import SwiftUI
 struct MainView: View {
     @ObservedObject var store: SessionStore
     @ObservedObject private var history = HistoryStore.shared
+    @ObservedObject private var updates = UpdateChecker.shared
     let compact: Bool
     var onOpenPreferences: (() -> Void)? = nil
     @FocusState private var searchFocused: Bool
@@ -114,6 +115,21 @@ struct MainView: View {
                 sessionMenu
             }
             Spacer()
+            if let version = updates.availableVersion {
+                Button(action: { updates.performUpdate() }) {
+                    Label("v\(version)", systemImage: "arrow.down.circle.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.accentColor)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(updates.isBrewInstall
+                    ? "Update available — runs brew upgrade in a new Terminal"
+                    : "Update available — opens the latest release page")
+            }
             if let onOpenPreferences = onOpenPreferences {
                 Button(action: onOpenPreferences) {
                     Image(systemName: "gear")

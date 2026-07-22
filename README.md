@@ -61,6 +61,7 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 | Switch session | Click the session name in the header |
 | Browse history across sessions | Session menu → **All sessions (history)** |
 | Open detached window | Right-click 🦀 → "Open window" |
+| Update the app | Click the ⬇ badge in the header when one appears (checks GitHub every 6h; brew installs get `brew upgrade` in a Terminal, direct installs get the release page) |
 | Quit | Right-click 🦀 → "Quit" |
 
 ### Right-click any block for…
