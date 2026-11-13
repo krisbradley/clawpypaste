@@ -35,8 +35,10 @@ struct ClawpypasteApp: App {
     var body: some Scene {
         // No real Scene needed — AppDelegate manages the menu bar item, the
         // detached browser window, and the preferences window as plain
-        // NSWindows. Settings { ... } scenes don't open reliably from a
-        // background (LSUIElement) app, so we don't use them.
-        Settings { EmptyView() }
+        // NSWindows. SwiftUI still demands one scene; an uninserted
+        // MenuBarExtra satisfies it without ever showing UI. (An empty
+        // Settings scene used to sit here, but newer macOS opens it as a
+        // blank "clawpypaste Settings" window at launch.)
+        MenuBarExtra("clawpypaste", isInserted: .constant(false)) { EmptyView() }
     }
 }
