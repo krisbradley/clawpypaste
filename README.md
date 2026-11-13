@@ -54,6 +54,7 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 | Open the popover | Click the 🦀 in the menu bar, or press **⌃⌥V** |
 | Move selection | **↑ / ↓** (Shift+arrow jumps by 10) |
 | Copy selected block | **Return** (popover auto-dismisses) |
+| Default copy format | Tables copy as rich table + TSV, markdown prose as rich text + clean plain text; raw markdown is right-click → **Copy as Markdown** (switch in Preferences → Behavior → Default copy) |
 | Copy the Nth visible block | **⌘1–⌘9** |
 | Focus search field | **/** |
 | Drag a block to another app | Click-and-hold, then drag |

@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 APP_NAME="clawpypaste"
 APP_BUNDLE="${APP_NAME}.app"
 BUNDLE_ID="com.kristopherbradley.${APP_NAME}"
-VERSION="0.4.10"
+VERSION="0.4.11"
 SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
 
 MODE="developer-id"
@@ -20,8 +20,11 @@ fi
 
 echo "Building universal release binary (arm64 + x86_64)..."
 swift build -c release --arch arm64 --arch x86_64
-# Multi-arch builds land in .build/apple/Products/Release, not .build/release.
-BINARY=".build/apple/Products/Release/${APP_NAME}"
+# Ask SwiftPM where the multi-arch product landed — the location has moved
+# between toolchains (.build/apple → .build/out), and a hardcoded path
+# silently packages a stale binary.
+BIN_DIR="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
+BINARY="${BIN_DIR}/${APP_NAME}"
 
 echo "Assembling ${APP_BUNDLE}..."
 rm -rf "${APP_BUNDLE}"

@@ -267,7 +267,10 @@ struct BlockRow: View {
             Divider()
         }
 
-        if mayBenefitFromRichCopy {
+        if block.isProseLike, mayBenefitFromRichCopy {
+            Button("Copy as Markdown") { onCopyAs(block.content) }
+        }
+        if mayBenefitFromRichCopy, !Preferences.shared.richDefaultCopy {
             Button("Copy as rich text (Docs, Word)") {
                 onCopyRich(
                     Transformer.markdownToHTML(block.content),
@@ -311,9 +314,7 @@ struct BlockRow: View {
 
     private var mayBenefitFromStripMarkdown: Bool {
         guard block.isProseLike else { return false }
-        let c = block.content
-        return c.contains("**") || c.contains("__") || c.contains("`") || c.contains("[")
-            || c.range(of: "^#{1,6} ", options: [.regularExpression, .anchored]) != nil
+        return RichCopy.hasMarkdownMarkers(block.content)
     }
 
     // True for Claude Code's "!command" shebang convention — a single line

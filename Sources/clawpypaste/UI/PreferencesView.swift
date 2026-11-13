@@ -132,6 +132,13 @@ struct PreferencesView: View {
         Form {
             Section("Popover") {
                 Toggle("Auto-dismiss after copy", isOn: $prefs.autoDismissPopover)
+                Picker("Default copy", selection: $prefs.richDefaultCopy) {
+                    Text("Rich text / TSV").tag(true)
+                    Text("Raw markdown").tag(false)
+                }
+                Text("What a click, Return, or ⌘1–⌘9 copies for tables and markdown prose. Rich text pastes styled into Docs/Word/Notes and as clean text (TSV for tables) into Slack and terminals. The other format is always in the right-click menu.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
                 Picker("Default filter on open", selection: $prefs.defaultBlockFilter) {
                     Text("All blocks").tag(Preferences.allBlockFilterSentinel)
                     ForEach(BlockKind.allCases, id: \.self) { kind in

@@ -27,20 +27,17 @@ struct ParsedTable {
         return out.joined(separator: "\n")
     }
 
+    // Cells are rendered through the inline-markdown renderer so **bold**,
+    // `code`, and [links](url) become real formatting in Docs/Word/Notes.
     func toHTML() -> String {
-        func esc(_ s: String) -> String {
-            s.replacingOccurrences(of: "&", with: "&amp;")
-                .replacingOccurrences(of: "<", with: "&lt;")
-                .replacingOccurrences(of: ">", with: "&gt;")
-        }
         var out = "<table><thead><tr>"
-        for h in header { out += "<th>\(esc(h))</th>" }
+        for h in header { out += "<th>\(Transformer.renderInline(h))</th>" }
         out += "</tr></thead><tbody>"
         for row in rows {
             var padded = row
             while padded.count < header.count { padded.append("") }
             out += "<tr>"
-            for cell in padded.prefix(header.count) { out += "<td>\(esc(cell))</td>" }
+            for cell in padded.prefix(header.count) { out += "<td>\(Transformer.renderInline(cell))</td>" }
             out += "</tr>"
         }
         out += "</tbody></table>"
@@ -65,12 +62,19 @@ struct ParsedTable {
         return out.joined(separator: "\n")
     }
 
+    // Plain-text exports drop inline markdown so Slack/Sheets get clean
+    // values instead of literal asterisks and backticks.
+    private func plain(_ cell: String) -> String {
+        Transformer.stripMarkdown(cell).replacingOccurrences(of: "<br>", with: " ")
+    }
+
     private func tabSafe(_ cell: String) -> String {
-        cell.replacingOccurrences(of: "\t", with: " ")
+        plain(cell).replacingOccurrences(of: "\t", with: " ")
             .replacingOccurrences(of: "\n", with: " ")
     }
 
-    private func csvEscape(_ cell: String) -> String {
+    private func csvEscape(_ raw: String) -> String {
+        let cell = plain(raw)
         if cell.contains(",") || cell.contains("\"") || cell.contains("\n") {
             return "\"" + cell.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }

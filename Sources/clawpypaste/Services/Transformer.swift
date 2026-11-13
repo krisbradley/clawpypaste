@@ -319,7 +319,7 @@ enum Transformer {
 
     // Inline rendering — escape first, then apply markdown→tag replacements on
     // already-escaped text so user-supplied < and > never become tags.
-    private static func renderInline(_ text: String) -> String {
+    static func renderInline(_ text: String) -> String {
         var s = escapeHTML(text)
 
         // Inline code first so its contents don't get re-processed by bold/italic.

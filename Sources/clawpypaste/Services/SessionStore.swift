@@ -121,7 +121,11 @@ final class SessionStore: ObservableObject {
     }
 
     func copy(_ block: Block) {
-        copy(block, asText: block.content)
+        if let rich = RichCopy.defaultPayload(for: block) {
+            copy(block, html: rich.html, plain: rich.plain)
+        } else {
+            copy(block, asText: block.content)
+        }
     }
 
     func copy(_ block: Block, asText text: String) {
