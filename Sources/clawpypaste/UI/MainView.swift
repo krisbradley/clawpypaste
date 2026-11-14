@@ -16,6 +16,10 @@ struct MainView: View {
             filterBar
             Divider()
             content
+            if !store.multiSelection.isEmpty {
+                Divider()
+                multiSelectBar
+            }
         }
         .frame(width: compact ? 420 : nil, height: compact ? 520 : nil)
         .frame(minWidth: compact ? nil : 520, minHeight: compact ? nil : 600)
@@ -53,7 +57,13 @@ struct MainView: View {
                                 onCopyAs: { text in store.copy(block, asText: text) },
                                 onCopyRich: { html, plain in store.copy(block, html: html, plain: plain) },
                                 onTogglePin: { store.togglePin(block) },
-                                onInject: { store.inject(block) }
+                                onInject: { store.inject(block) },
+                                multiIndex: store.multiSelectIndex(block),
+                                onToggleMulti: { store.toggleMultiSelect(block) },
+                                isPreviewing: Binding(
+                                    get: { store.previewBlockId == block.id },
+                                    set: { store.previewBlockId = $0 ? block.id : nil }
+                                )
                             )
                             .id(block.id)
                             Divider()
@@ -86,8 +96,20 @@ struct MainView: View {
                     .keyboardShortcut(.downArrow, modifiers: [.shift])
                 Button("") { store.moveSelection(by: -10) }
                     .keyboardShortcut(.upArrow, modifiers: [.shift])
-                Button("") { store.copySelected() }
-                    .keyboardShortcut(.return, modifiers: [])
+                Button("") {
+                    if store.multiSelection.isEmpty { store.copySelected() } else { store.copyMultiSelection() }
+                }
+                .keyboardShortcut(.return, modifiers: [])
+                Button("") { store.togglePreviewSelected() }
+                    .keyboardShortcut(.space, modifiers: [])
+                Button("") { store.pasteBackSelected() }
+                    .keyboardShortcut(.return, modifiers: [.command])
+                // Esc clears a multi-selection; otherwise it falls through so
+                // the popover still closes on Esc.
+                if !store.multiSelection.isEmpty {
+                    Button("") { store.clearMultiSelection() }
+                        .keyboardShortcut(.escape, modifiers: [])
+                }
             }
             Button("") { searchFocused = true }
                 .keyboardShortcut("/", modifiers: [])
@@ -240,6 +262,7 @@ struct MainView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     kindChip(nil, label: "All")
+                    pinnedChip
                     ForEach(BlockKind.allCases, id: \.self) { k in
                         kindChip(k, label: k.label)
                     }
@@ -248,6 +271,44 @@ struct MainView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var pinnedChip: some View {
+        Button(action: { store.pinnedOnly.toggle() }) {
+            Label("Pinned", systemImage: store.pinnedOnly ? "star.fill" : "star")
+                .font(.system(size: 11, weight: store.pinnedOnly ? .semibold : .regular))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(store.pinnedOnly ? Color.yellow.opacity(0.3) : Color.gray.opacity(0.12))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Show only pinned blocks — your snippet library across all sessions")
+    }
+
+    // MARK: - Multi-select bar
+
+    private var multiSelectBar: some View {
+        HStack(spacing: 8) {
+            Text("\(store.multiSelection.count) selected")
+                .font(.system(size: 11, weight: .semibold))
+            Spacer()
+            Menu("Copy for…") {
+                Button("Slack") { store.copyMultiSelection(target: .slack) }
+                Button("Docs") { store.copyMultiSelection(target: .docs) }
+                Button("Email") { store.copyMultiSelection(target: .email) }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            Button("Copy all  ↩") { store.copyMultiSelection() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button("Clear") { store.clearMultiSelection() }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     private func kindChip(_ kind: BlockKind?, label: String) -> some View {

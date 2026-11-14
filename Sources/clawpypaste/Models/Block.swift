@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 enum BlockKind: String, CaseIterable, Codable {
     case code         // fenced code from assistant text, or content written to a code file
@@ -91,10 +92,10 @@ struct Block: Identifiable, Hashable {
         )
     }
 
-    private static func hash(kind: BlockKind, content: String) -> String {
-        var hasher = Hasher()
-        hasher.combine(kind)
-        hasher.combine(content)
-        return String(hasher.finalize(), radix: 16)
+    // Stable across launches (unlike Swift's Hasher, which is randomly
+    // seeded per process — that made pins and CLI ids drift every launch).
+    static func hash(kind: BlockKind, content: String) -> String {
+        let digest = SHA256.hash(data: Data("\(kind.rawValue)\u{0}\(content)".utf8))
+        return digest.prefix(8).map { String(format: "%02x", $0) }.joined()
     }
 }

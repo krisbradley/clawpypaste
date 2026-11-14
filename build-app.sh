@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 APP_NAME="clawpypaste"
 APP_BUNDLE="${APP_NAME}.app"
 BUNDLE_ID="com.kristopherbradley.${APP_NAME}"
-VERSION="0.4.12"
+VERSION="0.4.14"
 SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
 
 MODE="developer-id"
@@ -25,6 +25,13 @@ swift build -c release --arch arm64 --arch x86_64
 # silently packages a stale binary.
 BIN_DIR="$(swift build -c release --arch arm64 --arch x86_64 --show-bin-path)"
 BINARY="${BIN_DIR}/${APP_NAME}"
+# Stale-build guard: SwiftPM's product must be newer than every source file,
+# or we'd package an old binary (happened once when the output dir moved).
+NEWER_SOURCE="$(find Sources Package.swift -newer "${BINARY}" -type f | head -1)"
+if [ ! -f "${BINARY}" ] || [ -n "${NEWER_SOURCE}" ]; then
+    echo "✗ stale build: ${NEWER_SOURCE:-binary missing} is newer than ${BINARY}" >&2
+    exit 1
+fi
 
 echo "Assembling ${APP_BUNDLE}..."
 rm -rf "${APP_BUNDLE}"

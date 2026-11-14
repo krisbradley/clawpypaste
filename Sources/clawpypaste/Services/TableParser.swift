@@ -44,6 +44,41 @@ struct ParsedTable {
         return out
     }
 
+    // Slack builds a real table from pasted HTML but drops all in-cell
+    // formatting (tags, styles, links alike). So cells go in as plain text,
+    // with links spelled out as "text (url)" so the URL isn't lost.
+    func toSlackHTML() -> String {
+        func cell(_ s: String) -> String {
+            slackSafe(plain(s)).replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+        }
+        var out = "<table><thead><tr>"
+        for h in header { out += "<th>\(cell(h))</th>" }
+        out += "</tr></thead><tbody>"
+        for row in rows {
+            var padded = row
+            while padded.count < header.count { padded.append("") }
+            out += "<tr>"
+            for c in padded.prefix(header.count) { out += "<td>\(cell(c))</td>" }
+            out += "</tr>"
+        }
+        out += "</tbody></table>"
+        return out
+    }
+
+    // TSV for the Slack payload's plain-text flavor. Slack inspects this
+    // too: a "#" in it makes Slack treat the paste as markdown text and skip
+    // building the table, so it gets the same "#" treatment as the HTML.
+    func toSlackTSV() -> String {
+        var out: [String] = []
+        out.append(header.map { tabSafe(slackSafe($0)) }.joined(separator: "\t"))
+        for row in rows {
+            out.append(row.map { tabSafe(slackSafe($0)) }.joined(separator: "\t"))
+        }
+        return out.joined(separator: "\n")
+    }
+
     func toTSV() -> String {
         var out: [String] = []
         out.append(header.map(tabSafe).joined(separator: "\t"))
@@ -66,6 +101,14 @@ struct ParsedTable {
     // values instead of literal asterisks and backticks.
     private func plain(_ cell: String) -> String {
         Transformer.stripMarkdown(cell).replacingOccurrences(of: "<br>", with: " ")
+    }
+
+    // Slack refuses to build a table when a cell contains "#" (it flattens
+    // the paste to text; a zero-width-space prefix doesn't fool it). A bare
+    // "#" header becomes "No."; other "#" become the look-alike full-width ＃.
+    private func slackSafe(_ cell: String) -> String {
+        if cell.trimmingCharacters(in: .whitespaces) == "#" { return "No." }
+        return cell.replacingOccurrences(of: "#", with: "\u{FF03}")
     }
 
     private func tabSafe(_ cell: String) -> String {

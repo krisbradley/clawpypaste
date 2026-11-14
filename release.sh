@@ -11,6 +11,24 @@ NOTARY_PROFILE="${CLAWPYPASTE_NOTARY_PROFILE:-clawpypaste}"
 # Always rebuild — easier to reason about than partial state.
 ./build-app.sh
 
+# Stale-build guard: refuse to ship a binary that predates the sources or
+# reports a different version than build-app.sh set. (A toolchain change once
+# moved SwiftPM's output dir and we silently packaged an old binary.)
+echo ""
+echo "Verifying the packaged binary is fresh..."
+BIN="${APP_BUNDLE}/Contents/MacOS/clawpypaste"
+EXPECTED_VERSION="$(sed -n 's/^VERSION="\(.*\)"$/\1/p' build-app.sh)"
+BUNDLE_VERSION="$(defaults read "$PWD/${APP_BUNDLE}/Contents/Info.plist" CFBundleShortVersionString)"
+if [ "${BUNDLE_VERSION}" != "${EXPECTED_VERSION}" ]; then
+    echo "✗ bundle version ${BUNDLE_VERSION} != build-app.sh VERSION ${EXPECTED_VERSION}" >&2
+    exit 1
+fi
+if ! lipo -info "${BIN}" | grep -q "x86_64" || ! lipo -info "${BIN}" | grep -q "arm64"; then
+    echo "✗ binary is not universal: $(lipo -info "${BIN}")" >&2
+    exit 1
+fi
+echo "   ✓ v${BUNDLE_VERSION}, universal (source freshness checked in build-app.sh)"
+
 echo ""
 echo "Zipping ${APP_BUNDLE}..."
 rm -f "${ZIP_NAME}"

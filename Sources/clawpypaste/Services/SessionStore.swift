@@ -17,6 +17,12 @@ final class SessionStore: ObservableObject {
     @Published var selectedBlockId: String? = nil
     @Published var scope: Scope = .active
     @Published private(set) var pinned: [PinnedBlock] = []
+    // ⌘-click multi-selection, in click order (that's the paste order).
+    @Published private(set) var multiSelection: [String] = []
+    // Block shown in the full-content preview (Space).
+    @Published var previewBlockId: String? = nil
+    // "Pinned" filter chip: show only pinned blocks (the snippet library).
+    @Published var pinnedOnly: Bool = false
 
     enum Scope: Equatable {
         case active
@@ -27,6 +33,9 @@ final class SessionStore: ObservableObject {
     // text into the previously-focused app.
     var onCopy: (() -> Void)?
     var onInject: ((String) -> Void)?
+    // Writes a payload to the pasteboard, then pastes into the app that was
+    // frontmost before the popover opened. Set by AppDelegate.
+    var onPasteBack: ((RichCopy.Payload?, String) -> Void)?
 
     func inject(_ block: Block) {
         onInject?(block.content)
@@ -44,6 +53,50 @@ final class SessionStore: ObservableObject {
         let currentIndex = blocks.firstIndex(where: { $0.id == selectedBlockId }) ?? -1
         let newIndex = max(0, min(blocks.count - 1, currentIndex + offset))
         selectedBlockId = blocks[newIndex].id
+    }
+
+    // MARK: - Multi-select
+
+    func toggleMultiSelect(_ block: Block) {
+        if let i = multiSelection.firstIndex(of: block.id) {
+            multiSelection.remove(at: i)
+        } else {
+            multiSelection.append(block.id)
+        }
+    }
+
+    func multiSelectIndex(_ block: Block) -> Int? {
+        multiSelection.firstIndex(of: block.id).map { $0 + 1 }
+    }
+
+    func clearMultiSelection() { multiSelection = [] }
+
+    private var multiSelectedBlocks: [Block] {
+        let all = filteredBlocks + blocks + HistoryStore.shared.blocks
+        return multiSelection.compactMap { id in all.first(where: { $0.id == id }) }
+    }
+
+    func copyMultiSelection(target: RichCopy.Target? = nil) {
+        let chosen = multiSelectedBlocks
+        guard let first = chosen.first else { return }
+        let p = RichCopy.combined(chosen, target: target ?? RichCopy.likelyTarget)
+        multiSelection = []
+        copy(first, html: p.html, plain: p.plain)
+    }
+
+    // MARK: - Paste back / preview
+
+    // Copy the selected block (rich default applies) and paste it straight
+    // into the app you came from.
+    func pasteBackSelected() {
+        guard let id = selectedBlockId,
+              let block = filteredBlocks.first(where: { $0.id == id })
+        else { return }
+        onPasteBack?(RichCopy.defaultPayload(for: block), block.content)
+    }
+
+    func togglePreviewSelected() {
+        previewBlockId = (previewBlockId == nil) ? selectedBlockId : nil
     }
 
     func copySelected() {
@@ -100,7 +153,7 @@ final class SessionStore: ObservableObject {
         let pinnedBlocks = pinned.map { $0.asBlock() }
         let pinnedIds = Set(pinnedBlocks.map(\.id))
         let unpinned = sourceBlocks.filter { !pinnedIds.contains($0.id) }
-        var result = pinnedBlocks + unpinned
+        var result = pinnedOnly ? pinnedBlocks : pinnedBlocks + unpinned
         if let k = kindFilter {
             result = result.filter { $0.kind == k }
         }

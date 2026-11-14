@@ -54,10 +54,14 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 | Open the popover | Click the 🦀 in the menu bar, or press **⌃⌥V** |
 | Move selection | **↑ / ↓** (Shift+arrow jumps by 10) |
 | Copy selected block | **Return** (popover auto-dismisses) |
-| Default copy format | Tables copy as rich table + TSV, markdown prose as rich text + clean plain text; raw markdown is right-click → **Copy as Markdown** (switch in Preferences → Behavior → Default copy) |
+| Default copy format | Tables copy as rich table + TSV, markdown prose as rich text + clean plain text; Slack gets its own table form automatically when Slack was frontmost; raw markdown is right-click → **Copy markdown** (switch in Preferences → Behavior → Default copy) |
 | Copy the Nth visible block | **⌘1–⌘9** |
+| Paste straight into the app you came from | **⌘Return** |
+| Preview the full block | **Space** (Esc / Space closes, Return copies) |
+| Select several blocks | **⌘-click** each, then **Return** (or the bar's **Copy for…**) to copy them as one, in click order |
+| Show only pinned blocks (snippet library) | **Pinned** chip in the filter bar |
 | Focus search field | **/** |
-| Drag a block to another app | Click-and-hold, then drag |
+| Drag a block to another app | Click-and-hold, then drag — carries the same rich formatting as a click; code blocks and tables dropped on Finder become files |
 | Pin / unpin | Click the star, or right-click → Pin |
 | Switch session | Click the session name in the header |
 | Browse history across sessions | Session menu → **All sessions (history)** |
@@ -69,11 +73,11 @@ Or right-click the menu bar 🦀 → **Launch at login**.
 
 - **Edit and copy…** — open the content in a TextEditor sheet; edit then copy
 - **Fill in values…** — when the block contains `{{placeholder}}` tokens, opens a labeled form to substitute values before copying
-- **Copy as rich text (Docs, Word)** — converts markdown to HTML on the pasteboard so Google Docs, Word, Pages, Notes, and Mail render styled (headings, bold/italic, lists, links, code, blockquotes, tables); terminals fall back to plain text
-- **Copy without markdown** — strips `**bold**`, `*italic*`, `` `code` ``, headings, lists, blockquotes, link syntax (great for Slack DMs)
+- **Copy for Slack / Docs / Email / Copy markdown** — on tables and markdown prose. *For Docs* pastes styled text and real tables (with bold/code/links in cells) into Docs, Word, Pages, Notes, and Mail. *For Slack* pastes a real Slack table with plain cells and links spelled out as `text (url)` (Slack drops in-cell formatting), and styled prose. *For Email* uses inline styles so Gmail/Mail/Outlook keep table borders and code fonts. *Markdown* is the raw source
+- **Copy as image** — renders the block as a clean card image (code, tables, prose) for places that mangle text
+- **Save as <file>…** — save to disk with a sensible name (`snippet.swift`, `table.tsv`, or the original file name from Write/Edit)
 - **Copy as pretty JSON** — when the block parses as JSON
 - **Wrap as code fence** — wrap a non-code block as ` ```lang ` for posting elsewhere
-- **Copy as Markdown / TSV (Slack, Docs) / CSV (Docs)** — on detected markdown tables; the TSV/CSV copies also carry an HTML flavor so Docs, Word, Numbers, and Notes paste a real table while Slack and terminals get the plain TSV/CSV
 - **Copy command (without !)** — on Claude Code `!command` shebang lines, drops the leading `!` so the bare command lands on the clipboard
 - **Run in new Terminal** — on bash/sh/zsh code blocks and `!command` shebang lines, opens a fresh Terminal.app or iTerm2 window (pick in Preferences → Terminal) and runs the command there; destructive-looking commands (`rm -rf`, `sudo`, `git push --force`, pipe-to-shell, …) ask for confirmation first
 - **Copy diff result (applied code)** — on ` ```diff ` blocks / unified diffs, drops removed lines and diff metadata and strips the `+`/context markers so you get the final code
@@ -91,6 +95,7 @@ The same binary doubles as a CLI for shell scripts:
 clawpypaste last [kind]      # print the most recent block (optionally of a kind) to stdout
 clawpypaste search <query>   # list blocks containing the query
 clawpypaste paste <id>       # copy a specific block to the clipboard
+clawpypaste image <id> [out] # render a block to a PNG card (same as Copy as image)
 clawpypaste list [kind]      # list all blocks (id, kind, lines, preview)
 clawpypaste kinds            # list valid kind names
 clawpypaste --enable-login   # register as a Login Item

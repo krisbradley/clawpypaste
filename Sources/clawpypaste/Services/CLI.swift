@@ -10,6 +10,7 @@ import AppKit
 //   clawpypaste paste <id>          — copy the block with that id to the system clipboard
 //   clawpypaste list [kind]         — list all blocks (id, kind, first line)
 //   clawpypaste kinds               — list valid kind names
+//   clawpypaste image <id> [out]    — render a block to a PNG card
 //   clawpypaste dump                — same as the --dump diagnostic
 //
 // All output is plain text; one record per line for `search` and `list`.
@@ -23,6 +24,7 @@ enum CLI {
         case "paste":  runPaste(id: args.dropFirst().first ?? ""); return true
         case "list":   runList(kind: args.dropFirst().first); return true
         case "kinds":  runKinds(); return true
+        case "image":  runImage(id: args.dropFirst().first ?? "", out: args.dropFirst(2).first); return true
         case "dump":   DebugDump.run(); return true
         case "-h", "--help":
             printHelp()
@@ -58,6 +60,21 @@ enum CLI {
         pb.clearContents()
         pb.setString(block.content, forType: .string)
         FileHandle.standardError.write("copied \(block.kind.rawValue) (\(block.lineCount) lines)\n".data(using: .utf8)!)
+    }
+
+    // Render a block to a PNG file (same card as "Copy as image").
+    private static func runImage(id: String, out: String?) {
+        guard let block = loadActiveBlocks().first(where: { $0.id == id }) else {
+            FileHandle.standardError.write("no block with id \(id)\n".data(using: .utf8)!)
+            exit(2)
+        }
+        let path = out ?? "clawpypaste-\(id).png"
+        let data = MainActor.assumeIsolated { BlockExport.pngData(block) }
+        guard let data, (try? data.write(to: URL(fileURLWithPath: path))) != nil else {
+            FileHandle.standardError.write("render failed\n".data(using: .utf8)!)
+            exit(1)
+        }
+        print(path)
     }
 
     private static func runList(kind: String?) {
@@ -109,6 +126,7 @@ enum CLI {
           clawpypaste search <query>   List blocks containing the query
           clawpypaste list [kind]      List all blocks
           clawpypaste paste <id>       Copy a specific block to the clipboard
+          clawpypaste image <id> [out] Render a block to a PNG (default ./clawpypaste-<id>.png)
           clawpypaste kinds            List valid kind names
           clawpypaste dump             Print parser summary
 

@@ -11,6 +11,10 @@ struct BlockRow: View {
     let onCopyRich: (String, String) -> Void
     let onTogglePin: () -> Void
     let onInject: () -> Void
+    // Optional extras — only the popover list wires these up.
+    var multiIndex: Int? = nil              // 1-based position in ⌘-click selection
+    var onToggleMulti: (() -> Void)? = nil
+    var isPreviewing: Binding<Bool>? = nil
 
     @State private var showingEditSheet = false
     @State private var showingSnippetSheet = false
@@ -39,7 +43,16 @@ struct BlockRow: View {
 
             Button(action: handlePrimaryAction) {
                 HStack(alignment: .top, spacing: 10) {
-                    kindBadge
+                    VStack(spacing: 4) {
+                        kindBadge
+                        if let n = multiIndex {
+                            Text("\(n)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 18, height: 18)
+                                .background(Color.accentColor, in: Circle())
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 3) {
                         if let title = block.title, !title.isEmpty {
                             Text(title)
@@ -81,17 +94,18 @@ struct BlockRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .draggable(block.content) {
-                Text(block.preview)
-                    .font(.system(size: 11, design: block.isCodeLike ? .monospaced : .default))
-                    .padding(8)
-                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 6))
-                    .frame(maxWidth: 300)
-            }
             .contextMenu { contextMenu }
+            DragHandle(block: block)
+                .frame(width: 18, height: 22)
+                .padding(.top, 4)
+                .padding(.trailing, 6)
+                .help("Drag into Slack, Docs, or Mail · ⌥-drag to Finder for a file")
         }
         .padding(.leading, 4)
         .background(rowBackground)
+        .sheet(isPresented: isPreviewing ?? .constant(false)) {
+            BlockPreviewSheet(block: block, onCopy: onCopy)
+        }
         .sheet(isPresented: $showingEditSheet) {
             EditCopySheet(
                 initial: block.content,
@@ -159,6 +173,10 @@ struct BlockRow: View {
     // still grab the literal text when you need it.
     private func handlePrimaryAction() {
         let cmdHeld = NSEvent.modifierFlags.contains(.command)
+        if cmdHeld, let onToggleMulti {
+            onToggleMulti()
+            return
+        }
         switch block.kind {
         case .path where !cmdHeld:
             openPath(block.content)
@@ -240,6 +258,11 @@ struct BlockRow: View {
         }
 
         Button("Edit and copy…") { showingEditSheet = true }
+        if let isPreviewing {
+            Button("Preview full block  (Space)") { isPreviewing.wrappedValue = true }
+        }
+        Button("Copy as image") { BlockExport.copyAsImage(block) }
+        Button("Save as \(BlockExport.suggestedFilename(for: block))…") { BlockExport.saveWithPanel(block) }
 
         if isBangCommand {
             Button("Copy command (without !)") {
@@ -258,25 +281,13 @@ struct BlockRow: View {
 
         Divider()
 
-        if block.kind == .table, let parsed = TableParser.parse(block.content) {
-            Button("Copy as Markdown") { onCopyAs(parsed.toMarkdown()) }
-            // Rich copies: Docs/Word/Notes paste a real table from the HTML
-            // flavor; Slack/terminals fall back to the TSV/CSV plain text.
-            Button("Copy as TSV (Slack, Docs)") { onCopyRich(parsed.toHTML(), parsed.toTSV()) }
-            Button("Copy as CSV (Docs)") { onCopyRich(parsed.toHTML(), parsed.toCSV()) }
+        // Destination-based copies for tables and markdown prose.
+        if RichCopy.hasRichForm(block) {
+            Button("Copy for Slack") { copyRich(for: .slack) }
+            Button("Copy for Docs") { copyRich(for: .docs) }
+            Button("Copy for Email") { copyRich(for: .email) }
+            Button("Copy markdown") { onCopyAs(block.content) }
             Divider()
-        }
-
-        if block.isProseLike, mayBenefitFromRichCopy {
-            Button("Copy as Markdown") { onCopyAs(block.content) }
-        }
-        if mayBenefitFromRichCopy, !Preferences.shared.richDefaultCopy {
-            Button("Copy as rich text (Docs, Word)") {
-                onCopyRich(
-                    Transformer.markdownToHTML(block.content),
-                    Transformer.stripMarkdown(block.content)
-                )
-            }
         }
 
         if block.isProseLike, Humanizer.looksAIGenerated(block.content) {
@@ -294,9 +305,6 @@ struct BlockRow: View {
                 onCopyAs(Transformer.stripQuoteMarkers(block.content))
             }
         }
-        if mayBenefitFromStripMarkdown {
-            Button("Copy without markdown") { onCopyAs(Transformer.stripMarkdown(block.content)) }
-        }
         if Transformer.looksLikeJSON(block.content) {
             Button("Copy as pretty JSON") { onCopyAs(Transformer.prettyJSON(block.content)) }
         }
@@ -312,9 +320,9 @@ struct BlockRow: View {
         Button(isPinned ? "Unpin" : "Pin") { onTogglePin() }
     }
 
-    private var mayBenefitFromStripMarkdown: Bool {
-        guard block.isProseLike else { return false }
-        return RichCopy.hasMarkdownMarkers(block.content)
+    private func copyRich(for target: RichCopy.Target) {
+        guard let p = RichCopy.payload(for: block, target: target) else { onCopy(); return }
+        onCopyRich(p.html, p.plain)
     }
 
     // True for Claude Code's "!command" shebang convention — a single line
@@ -340,14 +348,6 @@ struct BlockRow: View {
     // item reads "Run in new iTerm2" when that's the configured target.
     private var runTerminalName: String {
         (Terminal.RunApp(rawValue: Preferences.shared.runCommandTerminal) ?? .terminal).displayName
-    }
-
-    // Same gate as strip-markdown: only show "Copy as rich text" when the
-    // source actually contains markdown markers that would translate to
-    // styling. Plain prose with no markup has nothing to render and would
-    // just confuse the menu.
-    private var mayBenefitFromRichCopy: Bool {
-        mayBenefitFromStripMarkdown
     }
 
     // MARK: - Preview body
@@ -391,6 +391,7 @@ struct BlockRow: View {
 
     private var rowBackground: Color {
         if isSelected      { return Color.accentColor.opacity(0.18) }
+        if multiIndex != nil { return Color.accentColor.opacity(0.10) }
         if isRecentlyCopied { return Color.green.opacity(0.12) }
         if isPinned        { return Color.yellow.opacity(0.06) }
         return Color.clear

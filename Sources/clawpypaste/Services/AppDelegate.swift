@@ -41,7 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // The app that was frontmost just before our popover/menu stole focus.
     // Used by the Inject action and the "Send window screenshot" action to
     // figure out where to paste.
-    private var previousFrontmostApp: NSRunningApplication?
+    private var previousFrontmostApp: NSRunningApplication? {
+        // Default copy tailors its payload to where you'll likely paste.
+        didSet { RichCopy.pasteTargetBundleID = previousFrontmostApp?.bundleIdentifier }
+    }
 
     // Coordinator for the no-Screen-Recording-permission window-shot flow.
     private let screenshotCoordinator = WindowScreenshotCoordinator()
@@ -355,9 +358,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onInject = { [weak self] text in
             self?.injectIntoPreviousApp(text)
         }
+        store.onPasteBack = { [weak self] rich, text in
+            self?.injectIntoPreviousApp(text, rich: rich)
+        }
     }
 
-    private func injectIntoPreviousApp(_ text: String) {
+    private func injectIntoPreviousApp(_ text: String, rich: RichCopy.Payload? = nil) {
         // Accessibility / Input Monitoring permission is required to post
         // synthetic key events. The first call prompts the user.
         let opts = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
@@ -368,9 +374,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let pb = NSPasteboard.general
-        pb.clearContents()
-        pb.setString(text, forType: .string)
+        if let rich {
+            Clipboard.copyRich(html: rich.html, plain: rich.plain)
+        } else {
+            let pb = NSPasteboard.general
+            pb.clearContents()
+            pb.setString(text, forType: .string)
+        }
 
         popover.performClose(nil)
 

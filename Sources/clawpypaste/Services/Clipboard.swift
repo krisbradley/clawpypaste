@@ -14,7 +14,14 @@ enum Clipboard {
     static func copyRich(html: String, plain: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(html, forType: .html)
+        pb.setString(withCharset(html), forType: .html)
         pb.setString(plain, forType: .string)
+    }
+
+    // Declare UTF-8 explicitly. Without it, Slack (Chromium) misreads
+    // non-ASCII characters like → ⌘ ’ in pasted HTML and abandons building a
+    // table, flattening it to text instead.
+    static func withCharset(_ html: String) -> String {
+        html.hasPrefix("<meta charset") ? html : "<meta charset=\"utf-8\">" + html
     }
 }

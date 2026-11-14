@@ -11,6 +11,18 @@ struct PinnedBlock: Codable, Identifiable, Hashable {
     let title: String?
     let pinnedAt: Date
 
+    init(id: String, kind: BlockKind, content: String, language: String?, title: String?, pinnedAt: Date) {
+        self.id = id; self.kind = kind; self.content = content
+        self.language = language; self.title = title; self.pinnedAt = pinnedAt
+    }
+
+    // Same pin with its id recomputed by the stable hash (migrates pins
+    // saved under the old per-launch random ids).
+    func rehashed() -> PinnedBlock {
+        PinnedBlock(id: Block.hash(kind: kind, content: content), kind: kind, content: content,
+                    language: language, title: title, pinnedAt: pinnedAt)
+    }
+
     init(from block: Block) {
         self.id = block.id
         self.kind = block.kind
@@ -45,7 +57,8 @@ enum PinStore {
         guard let data = try? Data(contentsOf: fileURL),
               let pins = try? JSONDecoder().decode([PinnedBlock].self, from: data)
         else { return [] }
-        return pins
+        var seen = Set<String>()
+        return pins.map { $0.rehashed() }.filter { seen.insert($0.id).inserted }
     }
 
     static func save(_ pins: [PinnedBlock]) {
