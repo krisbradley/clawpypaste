@@ -9,6 +9,34 @@ struct MainView: View {
     var onOpenPreferences: (() -> Void)? = nil
     @FocusState private var searchFocused: Bool
 
+    @ViewBuilder
+    private func updateBadge(_ version: String) -> some View {
+        let (label, icon, color, help): (String, String, Color, String) = {
+            switch updates.state {
+            case .updating:
+                return ("Updating…", "arrow.triangle.2.circlepath", .gray, "Installing v\(version) — clawpypaste will restart")
+            case .failed(let msg):
+                return ("Update failed", "exclamationmark.triangle.fill", .red, msg)
+            case .idle:
+                return ("v\(version)", "arrow.down.circle.fill", .accentColor, updates.isBrewInstall
+                    ? "Update available — installs in the background and restarts"
+                    : "Update available — opens the latest release page")
+            }
+        }()
+        Button(action: { updates.performUpdate() }) {
+            Label(label, systemImage: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(color)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(updates.state == .updating)
+        .help(help)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -138,19 +166,7 @@ struct MainView: View {
             }
             Spacer()
             if let version = updates.availableVersion {
-                Button(action: { updates.performUpdate() }) {
-                    Label("v\(version)", systemImage: "arrow.down.circle.fill")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Color.accentColor)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .help(updates.isBrewInstall
-                    ? "Update available — runs brew upgrade in a new Terminal"
-                    : "Update available — opens the latest release page")
+                updateBadge(version)
             }
             if let onOpenPreferences = onOpenPreferences {
                 Button(action: onOpenPreferences) {

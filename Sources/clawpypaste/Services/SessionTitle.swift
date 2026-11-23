@@ -41,13 +41,39 @@ extension SessionMeta {
 }
 
 enum SessionTitle {
+    // Session files are append-only, so the cache keeps the parse state and
+    // the byte offset it reached; a changed mtime only parses the new tail.
     private struct CacheEntry {
         let mtime: Date
-        let meta: SessionMeta
+        let state: ScanState
+    }
+
+    private struct ScanState {
+        var offset: UInt64 = 0          // bytes consumed (always at a line boundary)
+        var customTitle: String?
+        var aiTitle: String?
+        var agentName: String?
+        var agentColor: String?
+        var firstPrompt: String?
+        var cwd: String?
+        var awaySummary: String?
+
+        var meta: SessionMeta {
+            SessionMeta(title: customTitle ?? aiTitle ?? agentName, firstPrompt: firstPrompt,
+                        agentColor: agentColor, cwd: cwd, awaySummary: awaySummary)
+        }
     }
 
     private static var cache: [URL: CacheEntry] = [:]
     private static let cacheLock = NSLock()
+
+    // Only lines containing one of these can change the metadata once cwd
+    // and the first prompt are known — everything else skips JSON decoding.
+    private static let markers: [[UInt8]] = [
+        "\"custom-title\"", "\"ai-title\"", "\"agent-name\"", "\"agent-color\"", "\"away_summary\"",
+    ].map { Array($0.utf8) }
+
+    private static let maxMetaLineLength = 32 * 1024
 
     static func resolve(url: URL, mtime: Date) -> String? {
         meta(url: url, mtime: mtime).title
@@ -55,17 +81,23 @@ enum SessionTitle {
 
     static func meta(url: URL, mtime: Date) -> SessionMeta {
         cacheLock.lock()
-        if let entry = cache[url], entry.mtime == mtime {
-            cacheLock.unlock()
-            return entry.meta
-        }
+        let entry = cache[url]
         cacheLock.unlock()
+        if let entry, entry.mtime == mtime { return entry.state.meta }
 
-        let parsed = parseMeta(url: url)
+        let state = scan(url: url, from: entry?.state ?? ScanState())
         cacheLock.lock()
-        cache[url] = CacheEntry(mtime: mtime, meta: parsed)
+        cache[url] = CacheEntry(mtime: mtime, state: state)
         cacheLock.unlock()
-        return parsed
+        return state.meta
+    }
+
+    // Parses metadata for these sessions off the main thread so the session
+    // menu reads warm cache entries instead of scanning big files on open.
+    static func prewarm(_ infos: [ActiveSession.Info]) {
+        DispatchQueue.global(qos: .utility).async {
+            for info in infos { _ = meta(url: info.url, mtime: info.modifiedAt) }
+        }
     }
 
     // MARK: - Lightweight scanning structs
@@ -107,70 +139,74 @@ enum SessionTitle {
         }
     }
 
-    private static func parseMeta(url: URL) -> SessionMeta {
-        guard let data = try? Data(contentsOf: url) else {
-            return SessionMeta(title: nil, firstPrompt: nil, agentColor: nil, cwd: nil, awaySummary: nil)
-        }
+    // Reads from `previous.offset` to EOF and folds complete lines into a
+    // new state. A file that shrank (rewritten) is rescanned from the start.
+    private static func scan(url: URL, from previous: ScanState) -> ScanState {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return previous }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        var state = size < previous.offset ? ScanState() : previous
+        guard size > state.offset else { return state }
+        do { try handle.seek(toOffset: state.offset) } catch { return state }
+        guard let data = try? handle.readToEnd(), !data.isEmpty else { return state }
+
         let decoder = JSONDecoder()
-
-        var customTitle: String?
-        var aiTitle: String?
-        var agentName: String?
-        var agentColor: String?
-        var firstPrompt: String?
-        var cwd: String?
-        var awaySummary: String?
-
-        let newline = UInt8(ascii: "\n")
-        var start = data.startIndex
-        for i in data.indices {
-            if data[i] == newline {
-                if start < i {
-                    let line = data[start..<i]
+        var consumed = 0
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            guard let base = raw.baseAddress else { return }
+            var lineStart = 0
+            while lineStart < raw.count,
+                  let nl = memchr(base + lineStart, Int32(UInt8(ascii: "\n")), raw.count - lineStart) {
+                let lineEnd = base.distance(to: nl)
+                let len = lineEnd - lineStart
+                if len > 0, wantsLine(base + lineStart, len, state) {
+                    let line = Data(bytes: base + lineStart, count: len)
                     if let rec = try? decoder.decode(MetaRecord.self, from: line) {
-                        // cwd lives on user / assistant / system records; take
-                        // the first one we find — it's stable for the session.
-                        if cwd == nil, let c = rec.cwd, !c.isEmpty { cwd = c }
-                        switch rec.type {
-                        case "custom-title":
-                            if let t = rec.customTitle, !t.isEmpty { customTitle = t }
-                        case "ai-title":
-                            if let t = rec.aiTitle, !t.isEmpty { aiTitle = t }
-                        case "agent-name":
-                            if let t = rec.agentName, !t.isEmpty { agentName = t }
-                        case "agent-color":
-                            if let c = rec.agentColor, !c.isEmpty { agentColor = c }
-                        case "user":
-                            if firstPrompt == nil,
-                               rec.isMeta != true,
-                               let s = rec.message?.content?.asString,
-                               let real = extractRealPromptText(s)
-                            {
-                                firstPrompt = trim(real)
-                            }
-                        case "system":
-                            // Most recent away_summary wins — Claude writes
-                            // a fresh one as the session progresses.
-                            if rec.subtype == "away_summary",
-                               let c = rec.content, !c.isEmpty
-                            {
-                                awaySummary = c
-                            }
-                        default:
-                            break
-                        }
+                        apply(rec, to: &state)
                     }
                 }
-                start = data.index(after: i)
+                lineStart = lineEnd + 1
+                consumed = lineStart
             }
         }
-        return SessionMeta(
-            title: customTitle ?? aiTitle ?? agentName,
-            firstPrompt: firstPrompt,
-            agentColor: agentColor,
-            cwd: cwd,
-            awaySummary: awaySummary
-        )
+        // A trailing partial line (mid-write) is left for the next scan.
+        state.offset += UInt64(consumed)
+        return state
+    }
+
+    private static func wantsLine(_ p: UnsafeRawPointer, _ len: Int, _ state: ScanState) -> Bool {
+        if state.cwd == nil || state.firstPrompt == nil { return true }
+        // Title/color/summary records are small; huge lines are tool output.
+        if len > maxMetaLineLength { return false }
+        return markers.contains { m in m.withUnsafeBytes { memmem(p, len, $0.baseAddress, m.count) != nil } }
+    }
+
+    private static func apply(_ rec: MetaRecord, to state: inout ScanState) {
+        // cwd lives on user / assistant / system records; the first is stable.
+        if state.cwd == nil, let c = rec.cwd, !c.isEmpty { state.cwd = c }
+        switch rec.type {
+        case "custom-title":
+            if let t = rec.customTitle, !t.isEmpty { state.customTitle = t }
+        case "ai-title":
+            if let t = rec.aiTitle, !t.isEmpty { state.aiTitle = t }
+        case "agent-name":
+            if let t = rec.agentName, !t.isEmpty { state.agentName = t }
+        case "agent-color":
+            if let c = rec.agentColor, !c.isEmpty { state.agentColor = c }
+        case "user":
+            if state.firstPrompt == nil, rec.isMeta != true,
+               let s = rec.message?.content?.asString,
+               let real = extractRealPromptText(s) {
+                state.firstPrompt = trim(real)
+            }
+        case "system":
+            // Most recent away_summary wins.
+            if rec.subtype == "away_summary", let c = rec.content, !c.isEmpty {
+                state.awaySummary = c
+            }
+        default:
+            break
+        }
     }
 
     // Strip the system-injected XML-style wrappers that Claude Code emits
