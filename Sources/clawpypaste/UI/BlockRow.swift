@@ -15,10 +15,13 @@ struct BlockRow: View {
     var multiIndex: Int? = nil              // 1-based position in ⌘-click selection
     var onToggleMulti: (() -> Void)? = nil
     var isPreviewing: Binding<Bool>? = nil
+    var onRenamePin: ((String) -> Void)? = nil
 
     @State private var showingEditSheet = false
     @State private var showingSnippetSheet = false
     @State private var showingRunConfirm = false
+    @State private var showingRename = false
+    @State private var pinNameDraft = ""
 
     private var maxPreviewLines: Int {
         switch block.kind {
@@ -120,6 +123,13 @@ struct BlockRow: View {
                 isCodeLike: block.isCodeLike,
                 onCopy: { text in onCopyAs(text) }
             )
+        }
+        .alert("Name this pin", isPresented: $showingRename) {
+            TextField("e.g. deploy script", text: $pinNameDraft)
+            Button("Save") { onRenamePin?(pinNameDraft) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The name shows on the row and is matched by search. Leave empty to clear it.")
         }
         .alert("Run this command?", isPresented: $showingRunConfirm) {
             Button("Run", role: .destructive) { Terminal.runInNewWindow(terminalCommand) }
@@ -318,6 +328,12 @@ struct BlockRow: View {
 
         Button("Inject into Claude prompt") { onInject() }
         Button(isPinned ? "Unpin" : "Pin") { onTogglePin() }
+        if isPinned, onRenamePin != nil {
+            Button("Name pin…") {
+                pinNameDraft = block.title ?? ""
+                showingRename = true
+            }
+        }
     }
 
     private func copyRich(for target: RichCopy.Target) {

@@ -75,7 +75,13 @@ struct MainView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(store.filteredBlocks) { block in
+                        let visible = store.filteredBlocks
+                        let firstOtherId = store.scope == .active
+                            ? visible.first(where: { $0.sourceSession != nil })?.id : nil
+                        ForEach(visible) { block in
+                            if block.id == firstOtherId {
+                                otherSessionsHeader
+                            }
                             BlockRow(
                                 block: block,
                                 isRecentlyCopied: store.recentlyCopiedId == block.id,
@@ -91,7 +97,8 @@ struct MainView: View {
                                 isPreviewing: Binding(
                                     get: { store.previewBlockId == block.id },
                                     set: { store.previewBlockId = $0 ? block.id : nil }
-                                )
+                                ),
+                                onRenamePin: { name in store.renamePin(block, to: name) }
                             )
                             .id(block.id)
                             Divider()
@@ -106,6 +113,19 @@ struct MainView: View {
                 }
             }
         }
+    }
+
+    private var otherSessionsHeader: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "books.vertical")
+            Text("In other sessions")
+            Spacer()
+        }
+        .font(.system(size: 10, weight: .semibold))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(Color.gray.opacity(0.08))
     }
 
     // MARK: - Keyboard shortcuts

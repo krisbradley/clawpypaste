@@ -20,11 +20,18 @@ final class HistoryStore: ObservableObject {
     }
 
     private var perFileCache: [URL: CacheEntry] = [:]
-    private let extractor = BlockExtractor()
     private let queue = DispatchQueue(label: "clawpypaste.history", qos: .utility)
 
     func ensureBuilt() {
         guard !isLoading, lastBuilt == nil else { return }
+        rebuild()
+    }
+
+    // Rebuilds when the index is missing or more than a couple of minutes
+    // old; unchanged files come from the per-file cache, so this is cheap.
+    func ensureFresh() {
+        guard !isLoading else { return }
+        if let built = lastBuilt, Date().timeIntervalSince(built) < 120 { return }
         rebuild()
     }
 
@@ -41,55 +48,62 @@ final class HistoryStore: ObservableObject {
         }
     }
 
+    // Files are parsed in parallel; unchanged files (same mtime) reuse their
+    // cached blocks, so a rebuild only re-reads sessions that changed.
     private func scan() -> [Block] {
-        let fm = FileManager.default
-        let projectsRoot = ActiveSession.projectsRoot
-        guard let projectDirs = try? fm.contentsOfDirectory(
-            at: projectsRoot,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        let files = Self.sessionFiles()
+        let cache = perFileCache
+        let lock = NSLock()
+        var results = [[Block]?](repeating: nil, count: files.count)
+        DispatchQueue.concurrentPerform(iterations: files.count) { i in
+            let (file, mtime) = files[i]
+            let blocks: [Block]?
+            if let entry = cache[file], entry.mtime == mtime {
+                blocks = entry.blocks
+            } else {
+                blocks = (try? SessionParser.parse(url: file)).map { BlockExtractor().extract(records: $0) }
+            }
+            lock.lock(); results[i] = blocks; lock.unlock()
+        }
 
         var allBlocks: [String: Block] = [:]
-
-        for dir in projectDirs {
-            guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
-            guard let files = try? fm.contentsOfDirectory(
-                at: dir,
-                includingPropertiesForKeys: [.contentModificationDateKey],
-                options: [.skipsHiddenFiles]
-            ) else { continue }
-            for file in files where file.pathExtension == "jsonl" {
-                guard let mtime = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { continue }
-                let fileBlocks: [Block]
-                if let entry = perFileCache[file], entry.mtime == mtime {
-                    fileBlocks = entry.blocks
-                } else if let records = try? SessionParser.parse(url: file) {
-                    fileBlocks = extractor.extract(records: records)
-                    perFileCache[file] = CacheEntry(mtime: mtime, blocks: fileBlocks)
-                } else {
-                    continue
-                }
-                // Stamp each block with its source session so the UI can
-                // show a session chip in history mode.
-                let meta = SessionTitle.meta(url: file, mtime: mtime)
-                let ref = SourceSessionRef(
-                    url: file,
-                    title: meta.title ?? meta.firstPrompt,
-                    agentColor: meta.agentColor
-                )
-                for var b in fileBlocks where allBlocks[b.id] == nil {
-                    b.sourceSession = ref
-                    allBlocks[b.id] = b
-                }
+        for (i, (file, mtime)) in files.enumerated() {
+            guard let fileBlocks = results[i] else { continue }
+            perFileCache[file] = CacheEntry(mtime: mtime, blocks: fileBlocks)
+            // Stamp each block with its source session so the UI can
+            // show a session chip in history mode.
+            let meta = SessionTitle.meta(url: file, mtime: mtime)
+            let ref = SourceSessionRef(url: file, title: meta.title ?? meta.firstPrompt, agentColor: meta.agentColor)
+            for var b in fileBlocks where allBlocks[b.id] == nil {
+                b.sourceSession = ref
+                allBlocks[b.id] = b
             }
         }
 
-        // Order: code-like first (turnIndex used for active session is meaningless
-        // across files), so just sort by content kind rank within each id.
-        return allBlocks.values.sorted { lhs, rhs in
-            kindRank(lhs.kind) < kindRank(rhs.kind)
+        // turnIndex is meaningless across files, so order by kind rank.
+        return allBlocks.values.sorted { kindRank($0.kind) < kindRank($1.kind) }
+    }
+
+    private static func sessionFiles() -> [(URL, Date)] {
+        let fm = FileManager.default
+        guard let projectDirs = try? fm.contentsOfDirectory(
+            at: ActiveSession.projectsRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+        var out: [(URL, Date)] = []
+        for dir in projectDirs {
+            guard (try? dir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
+                  let files = try? fm.contentsOfDirectory(
+                      at: dir, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles])
+            else { continue }
+            for file in files where file.pathExtension == "jsonl" {
+                if let m = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
+                    out.append((file, m))
+                }
+            }
         }
+        return out
     }
 
     private func kindRank(_ k: BlockKind) -> Int {
@@ -107,3 +121,4 @@ final class HistoryStore: ObservableObject {
         }
     }
 }
+

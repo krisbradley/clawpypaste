@@ -59,6 +59,11 @@ final class Preferences: ObservableObject {
     @Published var richDefaultCopy: Bool {
         didSet { UserDefaults.standard.set(richDefaultCopy, forKey: "richDefaultCopy"); didChange() }
     }
+    // Show a Dock icon while the browser / Preferences window is open.
+    // Off by default: clawpypaste stays a pure menu bar app.
+    @Published var showDockIcon: Bool {
+        didSet { UserDefaults.standard.set(showDockIcon, forKey: "showDockIcon"); didChange() }
+    }
     @Published var checkForUpdates: Bool {
         didSet { UserDefaults.standard.set(checkForUpdates, forKey: "checkForUpdates"); didChange() }
     }
@@ -116,6 +121,7 @@ final class Preferences: ObservableObject {
         copyLatestKind            = d.string(forKey: "copyLatestKind") ?? "code"
         richDefaultCopy           = d.object(forKey: "richDefaultCopy") as? Bool ?? true
         checkForUpdates           = d.object(forKey: "checkForUpdates") as? Bool ?? true
+        showDockIcon              = d.object(forKey: "showDockIcon") as? Bool ?? false
         recentSessionsLimit       = d.object(forKey: "recentSessionsLimit") as? Int ?? 10
         autoPinPatterns           = d.stringArray(forKey: "autoPinPatterns") ?? []
     }
@@ -137,6 +143,7 @@ final class Preferences: ObservableObject {
         copyLatestKind            = "code"
         richDefaultCopy           = true
         checkForUpdates           = true
+        showDockIcon              = false
         recentSessionsLimit       = 10
         autoPinPatterns           = []
     }

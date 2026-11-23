@@ -475,7 +475,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func openDetachedWindow() {
         popover.performClose(nil)
         if let w = detachedWindow {
-            NSApplication.shared.setActivationPolicy(.regular)
+            showDockIconIfEnabled()
             NSApp.activate(ignoringOtherApps: true)
             w.makeKeyAndOrderFront(nil)
             return
@@ -489,9 +489,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         w.isReleasedWhenClosed = false
         w.delegate = WindowDelegate.shared
         detachedWindow = w
-        NSApplication.shared.setActivationPolicy(.regular)
+        showDockIconIfEnabled()
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
+    }
+
+    // Windows open as a menu bar app unless the user opted into a Dock icon.
+    private func showDockIconIfEnabled() {
+        if Preferences.shared.showDockIcon {
+            NSApplication.shared.setActivationPolicy(.regular)
+        }
     }
 
     @objc private func rescan() { store.rescan() }
@@ -510,7 +517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var preferencesWindow: NSWindow?
 
     @objc private func openAbout() {
-        NSApplication.shared.setActivationPolicy(.regular)
+        showDockIconIfEnabled()
         NSApp.activate(ignoringOtherApps: true)
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let credits = NSAttributedString(
@@ -534,7 +541,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openPreferences() {
         if let w = preferencesWindow {
-            NSApplication.shared.setActivationPolicy(.regular)
+            showDockIconIfEnabled()
             NSApp.activate(ignoringOtherApps: true)
             w.makeKeyAndOrderFront(nil)
             return
@@ -548,7 +555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         w.isReleasedWhenClosed = false
         w.delegate = WindowDelegate.shared
         preferencesWindow = w
-        NSApplication.shared.setActivationPolicy(.regular)
+        showDockIconIfEnabled()
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
     }

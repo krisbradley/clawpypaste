@@ -166,6 +166,12 @@ struct PreferencesView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
+            Section("Dock") {
+                Toggle("Show Dock icon while a window is open", isOn: $prefs.showDockIcon)
+                Text("When on, the session browser and Preferences windows add a clawpypaste icon to the Dock (and ⌘-Tab) until they close.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
             Section("Updates") {
                 Toggle("Check for updates automatically", isOn: $prefs.checkForUpdates)
                 Text("Checks the GitHub releases feed every 6 hours. When a newer version exists, an update badge appears in the popover header and the menu bar right-click menu.")

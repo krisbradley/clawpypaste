@@ -10,17 +10,27 @@ struct PinnedBlock: Codable, Identifiable, Hashable {
     let language: String?
     let title: String?
     let pinnedAt: Date
+    // User-given name for the snippet library; shown in place of the title
+    // and matched by search. Optional so older pins.json files still decode.
+    let name: String?
 
-    init(id: String, kind: BlockKind, content: String, language: String?, title: String?, pinnedAt: Date) {
+    init(id: String, kind: BlockKind, content: String, language: String?, title: String?,
+         pinnedAt: Date, name: String? = nil) {
         self.id = id; self.kind = kind; self.content = content
         self.language = language; self.title = title; self.pinnedAt = pinnedAt
+        self.name = name
+    }
+
+    func renamed(_ newName: String?) -> PinnedBlock {
+        PinnedBlock(id: id, kind: kind, content: content, language: language, title: title,
+                    pinnedAt: pinnedAt, name: newName)
     }
 
     // Same pin with its id recomputed by the stable hash (migrates pins
     // saved under the old per-launch random ids).
     func rehashed() -> PinnedBlock {
         PinnedBlock(id: Block.hash(kind: kind, content: content), kind: kind, content: content,
-                    language: language, title: title, pinnedAt: pinnedAt)
+                    language: language, title: title, pinnedAt: pinnedAt, name: name)
     }
 
     init(from block: Block) {
@@ -30,6 +40,7 @@ struct PinnedBlock: Codable, Identifiable, Hashable {
         self.language = block.language
         self.title = block.title
         self.pinnedAt = Date()
+        self.name = nil
     }
 
     func asBlock() -> Block {
@@ -38,7 +49,7 @@ struct PinnedBlock: Codable, Identifiable, Hashable {
             kind: kind,
             content: content,
             language: language,
-            title: title,
+            title: name ?? title,
             turnIndex: Int.max,  // pinned always sorts to the top
             timestamp: pinnedAt
         )

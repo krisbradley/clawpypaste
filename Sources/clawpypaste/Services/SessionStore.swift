@@ -23,6 +23,11 @@ final class SessionStore: ObservableObject {
     @Published var previewBlockId: String? = nil
     // "Pinned" filter chip: show only pinned blocks (the snippet library).
     @Published var pinnedOnly: Bool = false
+    // While searching the active session: matches from every other session
+    // (from the history index), listed after the active session's results.
+    @Published private(set) var otherSessionMatches: [Block] = []
+    private var searchSubscriptions: Set<AnyCancellable> = []
+    private static let maxOtherSessionMatches = 50
 
     enum Scope: Equatable {
         case active
@@ -119,6 +124,7 @@ final class SessionStore: ObservableObject {
             kindFilter = kind
         }
         rescan()
+        wireCrossSessionSearch()
         // Re-check which session is active every 3s — handles the case where
         // the user starts a new Claude session in a different project. The
         // file watcher already handles content changes to the active file,
@@ -130,6 +136,13 @@ final class SessionStore: ObservableObject {
 
     func isPinned(_ block: Block) -> Bool {
         pinned.contains { $0.id == block.id }
+    }
+
+    func renamePin(_ block: Block, to name: String) {
+        guard let idx = pinned.firstIndex(where: { $0.id == block.id }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        pinned[idx] = pinned[idx].renamed(trimmed.isEmpty ? nil : trimmed)
+        PinStore.save(pinned)
     }
 
     func togglePin(_ block: Block) {
@@ -157,11 +170,63 @@ final class SessionStore: ObservableObject {
         if let k = kindFilter {
             result = result.filter { $0.kind == k }
         }
-        let q = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = searchText.trimmingCharacters(in: .whitespaces)
         if !q.isEmpty {
-            result = result.filter { $0.content.lowercased().contains(q) }
+            result = result.filter { Self.matches($0, q) }
+            if scope == .active, !pinnedOnly {
+                let others = kindFilter.map { k in otherSessionMatches.filter { $0.kind == k } } ?? otherSessionMatches
+                result += others
+            }
         }
         return result
+    }
+
+    // Case-insensitive match on content or title (a pin's name lives in title).
+    nonisolated static func matches(_ block: Block, _ query: String) -> Bool {
+        let opts: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return block.content.range(of: query, options: opts) != nil
+            || (block.title?.range(of: query, options: opts) != nil)
+    }
+
+    // MARK: - Cross-session search
+
+    private func wireCrossSessionSearch() {
+        $searchText
+            .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
+            .removeDuplicates()
+            .sink { [weak self] _ in self?.searchOtherSessions() }
+            .store(in: &searchSubscriptions)
+        // Re-run once the history index finishes (first search builds it).
+        HistoryStore.shared.$blocks
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.searchOtherSessions() }
+            .store(in: &searchSubscriptions)
+    }
+
+    private func searchOtherSessions() {
+        let q = searchText.trimmingCharacters(in: .whitespaces)
+        guard scope == .active, q.count >= 2 else {
+            if !otherSessionMatches.isEmpty { otherSessionMatches = [] }
+            return
+        }
+        HistoryStore.shared.ensureFresh()
+        let history = HistoryStore.shared.blocks
+        let excluded = Set(blocks.map(\.id)).union(pinned.map(\.id))
+        let activeURL = watcher?.url
+        let limit = Self.maxOtherSessionMatches
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var found: [Block] = []
+            for b in history where !excluded.contains(b.id) && b.sourceSession?.url != activeURL {
+                if Self.matches(b, q) {
+                    found.append(b)
+                    if found.count >= limit { break }
+                }
+            }
+            DispatchQueue.main.async {
+                guard let self, self.searchText.trimmingCharacters(in: .whitespaces) == q else { return }
+                self.otherSessionMatches = found
+            }
+        }
     }
 
     func enterHistoryScope() {
@@ -314,13 +379,25 @@ final class SessionStore: ObservableObject {
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.15, execute: work)
     }
 
+    // Parses off the main thread: only bytes appended since the last parse
+    // are decoded (SessionRecordCache), and extraction runs there too, so a
+    // busy 100 MB session doesn't stall the UI on every write.
     private func reparse(url: URL) {
-        guard let records = try? SessionParser.parse(url: url) else { return }
-        let newBlocks = extractor.extract(records: records)
-        blocks = newBlocks
-        lastUpdate = Date()
-        autoPinMatchingBlocks()
+        let extractor = self.extractor
+        Self.parseQueue.async { [weak self] in
+            let records = SessionRecordCache.shared.records(for: url)
+            let newBlocks = extractor.extract(records: records)
+            DispatchQueue.main.async {
+                // Drop results for a session we've since switched away from.
+                guard let self, self.watcher?.url == url else { return }
+                self.blocks = newBlocks
+                self.lastUpdate = Date()
+                self.autoPinMatchingBlocks()
+            }
+        }
     }
+
+    private static let parseQueue = DispatchQueue(label: "clawpypaste.parse", qos: .userInitiated)
 
     // Apply user-configured auto-pin regex patterns. Any block whose content
     // matches at least one pattern gets pinned (if not already). Idempotent —
