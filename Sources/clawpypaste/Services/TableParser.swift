@@ -160,12 +160,12 @@ enum TableParser {
         return out
     }
 
-    private static func isPipeRow(_ line: String) -> Bool {
+    static func isPipeRow(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         return trimmed.hasPrefix("|") && trimmed.hasSuffix("|") && trimmed.count >= 3
     }
 
-    private static func isSeparatorRow(_ line: String) -> Bool {
+    static func isSeparatorRow(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.hasPrefix("|"), trimmed.hasSuffix("|") else { return false }
         let body = trimmed.dropFirst().dropLast()

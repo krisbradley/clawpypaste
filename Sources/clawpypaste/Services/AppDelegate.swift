@@ -267,6 +267,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(withTitle: "Update available — v\(v)…", action: #selector(performUpdate), keyEquivalent: "")
                 .target = self
             menu.addItem(.separator())
+        } else {
+            menu.addItem(withTitle: "Check for Updates", action: #selector(checkForUpdatesNow), keyEquivalent: "")
+                .target = self
+            menu.addItem(.separator())
         }
         menu.addItem(withTitle: "Send window to Claude…", action: #selector(sendWindowToClaude), keyEquivalent: "s")
             .target = self
@@ -295,6 +299,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
         statusItem.button?.performClick(nil)
         statusItem.menu = nil  // detach so left-click reverts to popover
+    }
+
+    @objc private func checkForUpdatesNow() {
+        UpdateChecker.shared.checkNow()
     }
 
     @objc private func performUpdate() {
@@ -337,6 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 previousFrontmostApp = frontmost
             }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            UpdateChecker.shared.checkIfStale()
             popover.contentViewController?.view.window?.makeKey()
             NSApp.activate(ignoringOtherApps: true)
         }

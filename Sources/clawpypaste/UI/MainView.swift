@@ -225,7 +225,7 @@ struct MainView: View {
                         store.switchTo(info)
                     } label: {
                         let isCurrent = store.scope == .active && store.manuallyPinnedSession == info.url
-                        Text("\(colorDot(for: store.meta(for: info)))  \(store.displayName(for: info)) — \(timeAgo(info.modifiedAt))\(isCurrent ? "  ✓" : "")")
+                        Text("\(colorDot(for: store.meta(for: info)))  \(store.displayName(for: info)) — \(timeAgo(info.lastActivity))\(isCurrent ? "  ✓" : "")")
                     }
                 }
             }

@@ -20,6 +20,7 @@ final class UpdateChecker: ObservableObject {
     private static let latestReleaseAPI = URL(string: "https://api.github.com/repos/krisbradley/clawpypaste/releases/latest")!
     private static let releasesPage = URL(string: "https://github.com/krisbradley/clawpypaste/releases/latest")!
     private static let checkInterval: TimeInterval = 6 * 3600
+    private static let openCheckInterval: TimeInterval = 3600
     private static let lastCheckKey = "lastUpdateCheck"
 
     private var timer: Timer?
@@ -46,20 +47,36 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
+    // Called whenever the popover opens: checks if the last successful
+    // check is over an hour old, so a release shows up the next time you
+    // look instead of waiting for the 6-hour timer.
+    func checkIfStale() {
+        guard Preferences.shared.checkForUpdates else { return }
+        let last = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Date
+        if last == nil || Date().timeIntervalSince(last!) > Self.openCheckInterval {
+            checkNow()
+        }
+    }
+
     func checkNow() {
         // Running via `swift run` / CLI has no bundle version — nothing to compare.
         guard let current = currentVersion else { return }
-        UserDefaults.standard.set(Date(), forKey: Self.lastCheckKey)
 
         var request = URLRequest(url: Self.latestReleaseAPI)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        URLSession.shared.dataTask(with: request) { data, _, _ in
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        URLSession.shared.dataTask(with: request) { data, _, error in
             guard let data,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tag = json["tag_name"] as? String
-            else { return }
+            else {
+                // Not recorded as a check, so the next popover open retries.
+                NSLog("clawpypaste update check failed: \(error?.localizedDescription ?? "unexpected response")")
+                return
+            }
             let remote = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
             Task { @MainActor in
+                UserDefaults.standard.set(Date(), forKey: Self.lastCheckKey)
                 UpdateChecker.shared.availableVersion =
                     Self.isVersion(remote, newerThan: current) ? remote : nil
             }

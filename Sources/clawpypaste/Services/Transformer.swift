@@ -164,7 +164,9 @@ enum Transformer {
     // and Mail render as styled text when placed on the pasteboard's HTML
     // type. Handles fenced code, headings, lists, blockquotes, paragraphs,
     // and inline bold/italic/code/strikethrough/links.
-    static func markdownToHTML(_ text: String) -> String {
+    // `checklists`: render "- [ ]" items as Google Docs checklist items
+    // (clickable checkboxes in Docs); otherwise they become ☐ / ☑ text.
+    static func markdownToHTML(_ text: String, checklists: Bool = false) -> String {
         let lines = text.components(separatedBy: "\n")
         var html: [String] = []
         var i = 0
@@ -220,6 +222,25 @@ enum Transformer {
                 continue
             }
 
+            // Table embedded in prose: a pipe row followed by a separator row.
+            if TableParser.isPipeRow(trimmed), i + 1 < lines.count,
+               TableParser.isSeparatorRow(lines[i + 1].trimmingCharacters(in: .whitespaces)) {
+                var rows: [String] = []
+                while i < lines.count, TableParser.isPipeRow(lines[i].trimmingCharacters(in: .whitespaces)) {
+                    rows.append(lines[i].trimmingCharacters(in: .whitespaces))
+                    i += 1
+                }
+                if let table = TableParser.parse(rows.joined(separator: "\n")) {
+                    flushParagraph()
+                    closeList()
+                    html.append(table.toHTML())
+                    continue
+                }
+                // Not a real table after all: treat the rows as paragraph text.
+                paragraph.append(contentsOf: rows)
+                continue
+            }
+
             // Headings.
             if let (level, body) = headingMatch(trimmed) {
                 flushParagraph()
@@ -245,7 +266,8 @@ enum Transformer {
                     }
                     i += 1
                 }
-                html.append("<blockquote><p>\(renderInline(body.joined(separator: " ")))</p></blockquote>")
+                // Italic inside, since Docs and Slack drop the blockquote's border.
+                html.append("<blockquote><p><em>\(renderInline(body.joined(separator: " ")))</em></p></blockquote>")
                 continue
             }
 
@@ -257,7 +279,11 @@ enum Transformer {
                     html.append("<ul>")
                     openList = .ul
                 }
-                html.append("<li>\(renderInline(item))</li>")
+                if checklists, let (checked, rest) = taskItem(item) {
+                    html.append(DocsChecklist.item(renderInline(rest), checked: checked))
+                } else {
+                    html.append("<li>\(renderInline(taskCheckbox(item)))</li>")
+                }
                 i += 1
                 continue
             }
@@ -288,6 +314,19 @@ enum Transformer {
     }
 
     // MARK: - markdownToHTML helpers
+
+    // "- [ ] task" / "- [x] task" → ☐ / ☑ (HTML paste targets have no checkbox list).
+    private static func taskItem(_ item: String) -> (Bool, String)? {
+        if item.hasPrefix("[ ] ") { return (false, String(item.dropFirst(4))) }
+        if item.hasPrefix("[x] ") || item.hasPrefix("[X] ") { return (true, String(item.dropFirst(4))) }
+        return nil
+    }
+
+    private static func taskCheckbox(_ item: String) -> String {
+        if item.hasPrefix("[ ] ") { return "☐ " + item.dropFirst(4) }
+        if item.hasPrefix("[x] ") || item.hasPrefix("[X] ") { return "☑ " + item.dropFirst(4) }
+        return item
+    }
 
     private static func headingMatch(_ trimmed: String) -> (Int, String)? {
         guard trimmed.hasPrefix("#") else { return nil }

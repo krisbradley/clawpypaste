@@ -6,7 +6,9 @@ cd "$(dirname "$0")"
 
 APP_BUNDLE="clawpypaste.app"
 ZIP_NAME="clawpypaste.zip"
+DMG_NAME="clawpypaste.dmg"
 NOTARY_PROFILE="${CLAWPYPASTE_NOTARY_PROFILE:-clawpypaste}"
+SIGN_IDENTITY="${CLAWPYPASTE_SIGN_IDENTITY:-Developer ID Application: Kris Bradley (JEE5UP73GN)}"
 
 # Always rebuild — easier to reason about than partial state.
 ./build-app.sh
@@ -53,12 +55,26 @@ rm -f "${ZIP_NAME}"
 ditto -c -k --keepParent "${APP_BUNDLE}" "${ZIP_NAME}"
 
 echo ""
+echo "Building ${DMG_NAME} (drag-to-Applications disk image)..."
+STAGE="$(mktemp -d)"
+ditto "${APP_BUNDLE}" "${STAGE}/${APP_BUNDLE}"
+ln -s /Applications "${STAGE}/Applications"
+rm -f "${DMG_NAME}"
+hdiutil create -volname clawpypaste -srcfolder "${STAGE}" -ov -format UDZO "${DMG_NAME}" >/dev/null
+rm -rf "${STAGE}"
+codesign --force --timestamp --sign "${SIGN_IDENTITY}" "${DMG_NAME}"
+echo "Notarizing ${DMG_NAME}..."
+xcrun notarytool submit "${DMG_NAME}" --keychain-profile "${NOTARY_PROFILE}" --wait
+xcrun stapler staple "${DMG_NAME}"
+spctl --assess --type open --context context:primary-signature --verbose=2 "${DMG_NAME}" 2>&1 | sed 's/^/   /' || true
+
+echo ""
 echo "Verifying Gatekeeper acceptance..."
 spctl --assess --verbose=2 --type execute "${APP_BUNDLE}" 2>&1 | sed 's/^/   /' || true
 
 echo ""
-echo "✓ ${ZIP_NAME} is signed, notarized, and stapled."
-ls -lh "${ZIP_NAME}"
+echo "✓ ${ZIP_NAME} and ${DMG_NAME} are signed, notarized, and stapled."
+ls -lh "${ZIP_NAME}" "${DMG_NAME}"
 shasum -a 256 "${ZIP_NAME}"
 echo ""
-echo "Next:  gh release create vX.Y.Z ${ZIP_NAME}"
+echo "Next:  gh release create vX.Y.Z ${ZIP_NAME} ${DMG_NAME}   (cask sha256 = the zip's)"

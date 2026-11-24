@@ -124,10 +124,10 @@ final class SessionBrowserStore: ObservableObject {
         var older: [ActiveSession.Info] = []
         let cal = Calendar.current
         for info in filteredSessions {
-            if cal.isDateInToday(info.modifiedAt) { today.append(info) }
-            else if cal.isDateInYesterday(info.modifiedAt) { yesterday.append(info) }
-            else if now.timeIntervalSince(info.modifiedAt) < 86400 * 7 { week.append(info) }
-            else if now.timeIntervalSince(info.modifiedAt) < 86400 * 30 { month.append(info) }
+            if cal.isDateInToday(info.lastActivity) { today.append(info) }
+            else if cal.isDateInYesterday(info.lastActivity) { yesterday.append(info) }
+            else if now.timeIntervalSince(info.lastActivity) < 86400 * 7 { week.append(info) }
+            else if now.timeIntervalSince(info.lastActivity) < 86400 * 30 { month.append(info) }
             else { older.append(info) }
         }
         var groups: [DateGroup] = []
@@ -237,7 +237,7 @@ final class SessionBrowserStore: ObservableObject {
         out.append("")
         if let cwd = meta.cwd { out.append("**Project:** `\(cwd)`") }
         out.append("**Session ID:** `\(info.url.deletingPathExtension().lastPathComponent)`")
-        out.append("**Last activity:** \(info.modifiedAt)")
+        out.append("**Last activity:** \(info.lastActivity)")
         if let summary = meta.awaySummary {
             out.append("")
             out.append("**Summary:** \(summary)")

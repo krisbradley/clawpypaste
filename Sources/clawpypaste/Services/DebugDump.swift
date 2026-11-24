@@ -9,6 +9,7 @@ enum DebugDump {
         print("active session: \(info.url.path)")
         print("  project: \(info.projectDir)")
         print("  modified: \(info.modifiedAt)")
+        print("  last activity: \(info.lastActivity)")
 
         guard let records = try? SessionParser.parse(url: info.url) else {
             print("failed to parse")

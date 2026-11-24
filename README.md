@@ -1,11 +1,25 @@
 # 🦀 clawpypaste
 
-A macOS menu bar app that surfaces grabbable blocks from your active **Claude Code** session — fenced code, tool output, file paths, URLs, whole messages, markdown, tables — so you can click to copy instead of mouse-selecting across wrapped lines in your terminal.
+**Copy anything out of Claude Code and paste it into Slack, Docs, or email looking right.**
 
-Reads the session JSONL Claude Code already writes to disk. No accessibility prompts for the basic features, no terminal scraping, no plugins.
+Tables land as real tables. Markdown lands as formatting, not `**asterisks**`. Code, tool output, paths and URLs are one click away — no more mouse-selecting across wrapped terminal lines.
+
+```bash
+brew install --cask krisbradley/tap/clawpypaste
+```
 
 <p align="center">
-  <img src="docs/screenshot.png" alt="clawpypaste popover" width="495">
+  <img src="docs/demo-slack.gif" alt="Copying a Claude Code table into Slack as a real table" width="800">
+</p>
+
+- **Paste-ready everywhere** — one click gives Slack a native table, Google Docs formatted tables and real checklists, Mail a styled table. Raw markdown is still a right-click away.
+- **Every block, one click** — fenced code, tool output, file paths, URLs, quotes, whole messages, from your active session.
+- **All your sessions** — switch sessions from the menu bar and search across every past session.
+- **Snippet library** — star blocks to pin them, name them, find them later.
+- **Stays out of the way** — a menu bar app that reads the session files Claude Code already writes. No plugins, no terminal scraping, no accessibility prompts for the basics.
+
+<p align="center">
+  <img src="docs/demo-docs.gif" alt="Pasting a Claude Code answer into Google Docs with headings, lists, a table and checkboxes intact" width="720">
 </p>
 
 ## Install
@@ -23,7 +37,7 @@ The cask installs `clawpypaste.app` into `/Applications` and symlinks the binary
 
 ### Direct download
 
-Grab the notarized `clawpypaste.zip` from the [latest release](https://github.com/krisbradley/clawpypaste/releases/latest), unzip, drag `clawpypaste.app` into `/Applications`, double-click.
+Download **`clawpypaste.dmg`** from the [latest release](https://github.com/krisbradley/clawpypaste/releases/latest), open it, and drag clawpypaste into Applications. (A notarized `clawpypaste.zip` is there too.)
 
 ### From source
 
@@ -48,6 +62,10 @@ clawpypaste --enable-login
 Or right-click the menu bar 🦀 → **Launch at login**.
 
 ## Usage
+
+<p align="center">
+  <img src="docs/screenshot.png" alt="clawpypaste popover" width="495">
+</p>
 
 | Action | How |
 |---|---|

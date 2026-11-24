@@ -47,14 +47,20 @@ enum RichCopy {
         if block.kind == .table, let parsed = TableParser.parse(block.content) {
             switch target {
             case .slack: return Payload(html: parsed.toSlackHTML(), plain: parsed.toSlackTSV())
-            case .docs:  return Payload(html: parsed.toHTML(), plain: parsed.toTSV())
+            case .docs:  return Payload(html: DocsStyler.inline(parsed.toHTML()), plain: parsed.toTSV())
             case .email: return Payload(html: EmailStyler.inline(parsed.toHTML()), plain: parsed.toTSV())
             }
         }
         if block.isProseLike, hasMarkdownMarkers(block.content) {
-            let html = Transformer.markdownToHTML(block.content)
+            let html = Transformer.markdownToHTML(block.content, checklists: target == .docs)
+            let styled: String
+            switch target {
+            case .email: styled = EmailStyler.inline(html)
+            case .docs:  styled = DocsStyler.inline(html)
+            case .slack: styled = html
+            }
             return Payload(
-                html: target == .email ? EmailStyler.inline(html) : html,
+                html: styled,
                 plain: Transformer.stripMarkdown(block.content)
             )
         }
@@ -101,6 +107,21 @@ enum RichCopy {
         s.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
+    }
+}
+
+// Google Docs pastes a bare <table> with no borders and squeezes columns,
+// so tables get explicit borders and padding. Other tags are left alone so
+// Docs applies its own heading/body styles.
+enum DocsStyler {
+    private static let styles: [(tag: String, style: String)] = [
+        ("table", "border-collapse:collapse;width:100%"),
+        ("th", "border:1px solid #bfbfbf;padding:5px 8px;background:#f3f3f3;text-align:left;font-weight:bold;vertical-align:top"),
+        ("td", "border:1px solid #bfbfbf;padding:5px 8px;text-align:left;vertical-align:top"),
+    ]
+
+    static func inline(_ html: String) -> String {
+        styles.reduce(html) { out, s in out.replacingOccurrences(of: "<\(s.tag)>", with: "<\(s.tag) style=\"\(s.style)\">") }
     }
 }
 
